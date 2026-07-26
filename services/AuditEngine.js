@@ -1,3 +1,8 @@
+results.push({
+    level: "Info",
+    title: "VERSION",
+    description: "VERSION 2 - 26 JULY 2026"
+});
 import ManagerService from "./ManagerService.js";
 
 export default class AuditEngine {
