@@ -4,32 +4,31 @@ export default class EntityService {
 
     static async initialize() {
 
-        console.log("EntityService initialized");
+        const endpoints = [
+            "customers",
+            "inventory-items",
+            "inventory_items",
+            "items",
+            "accounts",
+            "tax-codes",
+            "tax_codes",
+            "projects",
+            "divisions"
+        ];
 
-        // المرحلة القادمة:
-        // سنكتشف كيف يوفّر Manager:
-        // - Accounts
-        // - Customers
-        // - Inventory Items
-        // - Tax Codes
+        for (const endpoint of endpoints) {
 
-    }
+            try {
 
-    static async probe(endpoint) {
+                const result = await ManagerService.api(endpoint);
 
-        try {
+                console.log("SUCCESS:", endpoint, result);
 
-            const data = await ManagerService.api(endpoint);
+            } catch (error) {
 
-            console.log(endpoint, data);
+                console.log("FAILED:", endpoint, error);
 
-            return data;
-
-        } catch (error) {
-
-            console.log(endpoint, error);
-
-            return null;
+            }
 
         }
 
