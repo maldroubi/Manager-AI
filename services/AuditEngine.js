@@ -1,4 +1,5 @@
 import ManagerService from "./ManagerService.js";
+import EntityService from "./EntityService.js";
 import Rules from "./RuleRegistry.js";
 
 export default class AuditEngine {
@@ -8,6 +9,7 @@ export default class AuditEngine {
         try {
 
             await ManagerService.initialize();
+            await EntityService.initialize();
 
             const invoice = await ManagerService.getCurrentInvoice();
 
@@ -43,23 +45,40 @@ export default class AuditEngine {
 
             for (const Rule of Rules) {
 
-                const issues = await Rule.execute(invoice);
+                try {
 
-                if (issues?.length) {
-                    results.push(...issues);
+                    const issues = await Rule.execute(invoice);
+
+                    if (Array.isArray(issues) && issues.length > 0) {
+                        results.push(...issues);
+                    }
+
+                } catch (error) {
+
+                    results.push({
+                        code: "SYS-001",
+                        category: "System",
+                        level: "Error",
+                        title: Rule.name,
+                        description: error.message,
+                        recommendation: "Review the rule implementation."
+                    });
+
                 }
 
             }
 
             const errors = results.filter(r => r.level === "Error").length;
             const warnings = results.filter(r => r.level === "Warning").length;
+            const infos = results.filter(r => r.level === "Info").length;
 
             results.push({
                 level: "Success",
                 title: "Audit Summary",
                 description:
 `Errors : ${errors}
-Warnings : ${warnings}`
+Warnings : ${warnings}
+Info : ${infos}`
             });
 
             return results;
