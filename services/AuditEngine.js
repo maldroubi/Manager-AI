@@ -1,8 +1,5 @@
 import ManagerService from "./ManagerService.js";
-
-import EmptyInvoiceRule from "./rules/EmptyInvoiceRule.js";
-import MissingCustomerRule from "./rules/MissingCustomerRule.js";
-import InvalidQuantityRule from "./rules/InvalidQuantityRule.js";
+import Rules from "./RuleRegistry.js";
 
 export default class AuditEngine {
 
@@ -44,15 +41,9 @@ export default class AuditEngine {
                 description: invoice.issueDate ?? "(None)"
             });
 
-            const rules = [
-                EmptyInvoiceRule,
-                MissingCustomerRule,
-                InvalidQuantityRule
-            ];
+            for (const Rule of Rules) {
 
-            for (const rule of rules) {
-
-                const issues = await rule.execute(invoice);
+                const issues = await Rule.execute(invoice);
 
                 if (issues?.length) {
                     results.push(...issues);
@@ -66,13 +57,15 @@ export default class AuditEngine {
             results.push({
                 level: "Success",
                 title: "Audit Summary",
-                description: `Errors : ${errors}
+                description:
+`Errors : ${errors}
 Warnings : ${warnings}`
             });
 
             return results;
 
-        } catch (error) {
+        }
+        catch (error) {
 
             return [{
                 level: "Error",
