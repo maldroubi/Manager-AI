@@ -25,7 +25,6 @@ export default class ManagerService {
                 case "page-response":
 
                     this.page = data.body;
-
                     break;
 
                 case "api-response":
@@ -54,7 +53,7 @@ export default class ManagerService {
 
             const handler = (event) => {
 
-                if (event.data.type === "page-response") {
+                if (event.data?.type === "page-response") {
 
                     window.removeEventListener("message", handler);
 
@@ -91,10 +90,8 @@ export default class ManagerService {
             window.parent.postMessage({
 
                 type: "api-request",
-
                 requestId: id,
-
-                path: path
+                path
 
             }, "*");
 
@@ -106,15 +103,76 @@ export default class ManagerService {
 
         const page = await this.getPage();
 
-        if (!page?.query?.key)
+        if (!page?.query?.key) {
 
             throw new Error("Invoice key not found.");
 
+        }
+
         return await this.api(
-
             `/api4/sales-invoice?key=${page.query.key}`
-
         );
+
+    }
+
+    static async getInvoice() {
+
+        const raw = await this.getCurrentInvoice();
+
+        return {
+
+            raw,
+
+            key: raw?.key ?? null,
+
+            number:
+                raw?.reference ??
+                raw?.number ??
+                raw?.invoiceNumber ??
+                null,
+
+            customer:
+                raw?.customer ??
+                raw?.customerName ??
+                raw?.customer_name ??
+                null,
+
+            issueDate:
+                raw?.date ??
+                raw?.issueDate ??
+                null,
+
+            dueDate:
+                raw?.dueDate ??
+                null,
+
+            currency:
+                raw?.currency ??
+                raw?.currencyCode ??
+                null,
+
+            subtotal:
+                raw?.subtotal ??
+                raw?.subTotal ??
+                0,
+
+            tax:
+                raw?.tax ??
+                raw?.taxAmount ??
+                0,
+
+            total:
+                raw?.total ??
+                raw?.totalAmount ??
+                0,
+
+            items:
+                raw?.items ??
+                raw?.lines ??
+                raw?.lineItems ??
+                []
+
+        };
 
     }
 

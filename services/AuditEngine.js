@@ -4,52 +4,57 @@ export default class AuditEngine {
 
     static async scan() {
 
-        const results = [];
-
         try {
 
-            // تحميل الصفحة الحالية
-            const page = await ManagerService.getPage();
+            const invoice = await ManagerService.getInvoice();
 
-            console.log("Current Page:", page);
-
-            // تحميل الفاتورة الحالية
-            const invoice = await ManagerService.getCurrentInvoice();
-
-            console.log("Invoice:", invoice);
+            const results = [];
 
             results.push({
-                level: "Success",
-                title: "Connection Successful",
-                description: "Invoice loaded successfully from Manager."
+                level: "Info",
+                title: "Invoice Summary",
+                description:
+`Invoice Number : ${invoice.number ?? "(None)"}
+
+Customer : ${invoice.customer ?? "(Unknown Customer)"}
+
+Issue Date : ${invoice.issueDate ?? "-"}
+
+Due Date : ${invoice.dueDate ?? "-"}
+
+Currency : ${invoice.currency ?? "-"}
+
+Items : ${invoice.items.length}
+
+Subtotal : ${invoice.subtotal}
+
+Tax : ${invoice.tax}
+
+Total : ${invoice.total}`
             });
 
             results.push({
                 level: "Info",
-                title: "Invoice Number",
-                description: invoice.reference || "(No Reference)"
+                title: "Raw Invoice JSON",
+                description: JSON.stringify(invoice.raw, null, 2)
             });
 
-            results.push({
-                level: "Info",
-                title: "Customer",
-                description: invoice.customer?.name || "(Unknown Customer)"
-            });
+            return results;
 
         }
         catch (error) {
 
-            console.error(error);
+            return [
 
-            results.push({
-                level: "Critical",
-                title: "Connection Failed",
-                description: error.message
-            });
+                {
+                    level: "Error",
+                    title: "Audit Failed",
+                    description: error.message
+                }
+
+            ];
 
         }
-
-        return results;
 
     }
 
