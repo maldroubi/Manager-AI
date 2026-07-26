@@ -1,8 +1,3 @@
-results.push({
-    level: "Info",
-    title: "VERSION",
-    description: "VERSION 2 - 26 JULY 2026"
-});
 import ManagerService from "./ManagerService.js";
 
 export default class AuditEngine {
@@ -11,40 +6,17 @@ export default class AuditEngine {
 
         try {
 
-            const invoice = await ManagerService.getInvoice();
+            const raw = await ManagerService.getCurrentInvoice();
 
-            const results = [];
+            return [
 
-            results.push({
-                level: "Info",
-                title: "Invoice Summary",
-                description:
-`Invoice Number : ${invoice.number ?? "(None)"}
+                {
+                    level: "Info",
+                    title: "RAW JSON",
+                    description: JSON.stringify(raw, null, 2)
+                }
 
-Customer : ${invoice.customer ?? "(Unknown Customer)"}
-
-Issue Date : ${invoice.issueDate ?? "-"}
-
-Due Date : ${invoice.dueDate ?? "-"}
-
-Currency : ${invoice.currency ?? "-"}
-
-Items : ${invoice.items.length}
-
-Subtotal : ${invoice.subtotal}
-
-Tax : ${invoice.tax}
-
-Total : ${invoice.total}`
-            });
-
-            results.push({
-                level: "Info",
-                title: "Raw Invoice JSON",
-                description: JSON.stringify(invoice.raw, null, 2)
-            });
-
-            return results;
+            ];
 
         }
         catch (error) {
