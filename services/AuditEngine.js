@@ -1,6 +1,8 @@
 import ManagerService from "./ManagerService.js";
 
 import EmptyInvoiceRule from "./rules/EmptyInvoiceRule.js";
+import MissingCustomerRule from "./rules/MissingCustomerRule.js";
+import InvalidQuantityRule from "./rules/InvalidQuantityRule.js";
 
 export default class AuditEngine {
 
@@ -24,8 +26,6 @@ export default class AuditEngine {
 
             const results = [];
 
-            // معلومات عامة
-
             results.push({
                 level: "Success",
                 title: "Connection",
@@ -44,13 +44,11 @@ export default class AuditEngine {
                 description: invoice.issueDate ?? "(None)"
             });
 
-            // قائمة القواعد
-
             const rules = [
-                EmptyInvoiceRule
+                EmptyInvoiceRule,
+                MissingCustomerRule,
+                InvalidQuantityRule
             ];
-
-            // تنفيذ القواعد
 
             for (const rule of rules) {
 
@@ -62,23 +60,19 @@ export default class AuditEngine {
 
             }
 
-            // الملخص
-
             const errors = results.filter(r => r.level === "Error").length;
             const warnings = results.filter(r => r.level === "Warning").length;
 
             results.push({
                 level: "Success",
                 title: "Audit Summary",
-                description:
-`Errors : ${errors}
+                description: `Errors : ${errors}
 Warnings : ${warnings}`
             });
 
             return results;
 
-        }
-        catch (error) {
+        } catch (error) {
 
             return [{
                 level: "Error",
