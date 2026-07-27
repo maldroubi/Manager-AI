@@ -77,7 +77,7 @@ export default class ManagerService {
 
     }
 
-    static async api(path) {
+    static async api(request) {
 
         await this.initialize();
 
@@ -87,13 +87,20 @@ export default class ManagerService {
 
             this.pending[id] = resolve;
 
-            window.parent.postMessage({
+            const payload =
+                typeof request === "string"
+                    ? {
+                        type: "api-request",
+                        requestId: id,
+                        path: request
+                    }
+                    : {
+                        type: "api-request",
+                        requestId: id,
+                        ...request
+                    };
 
-                type: "api-request",
-                requestId: id,
-                path
-
-            }, "*");
+            window.parent.postMessage(payload, "*");
 
         });
 
