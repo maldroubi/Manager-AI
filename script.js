@@ -54,15 +54,20 @@ async function start() {
 
      const reports = await managerRequest("/api4/reports");
 
-const trialBalanceUrl =
-    reports.body._links.trialBalance.href;
+const batch = await managerRequest(
+    reports.body._links.trialBalance.href
+);
 
-const result =
-    await managerRequest(trialBalanceUrl);
+const first = batch.body.items[0];
+
+const result = await managerRequest(
+    first._links.self.href
+);
 
 output.textContent =
     JSON.stringify(result, null, 2);
     
+
 
         output.textContent = JSON.stringify(result, null, 2);
 
