@@ -5,24 +5,20 @@ const pending = new Map();
 
 // استقبال الرد من Manager
 window.addEventListener("message", (event) => {
-
     const data = event.data;
 
     if (!data) return;
     if (data.type !== "api-response") return;
 
     const callback = pending.get(data.requestId);
-
     if (!callback) return;
 
     pending.delete(data.requestId);
-
     callback(data);
-
 });
 
 // إرسال طلب إلى Manager
-function managerRequest(path, method = "GET", body = null) {
+function managerRequest(path, method = "GET", query = null, body = null) {
 
     return new Promise((resolve) => {
 
@@ -35,6 +31,7 @@ function managerRequest(path, method = "GET", body = null) {
             requestId: id,
             path,
             method,
+            query,
             body
         }, "*");
 
@@ -44,16 +41,40 @@ function managerRequest(path, method = "GET", body = null) {
 
 async function start() {
 
-    output.textContent = "Loading OpenAPI...";
+    output.textContent = "Loading Trial Balance...";
 
     try {
 
-        const result = await managerRequest(
-            "/openapi/get-trial-balance.json"
+        // الحصول على قائمة التقارير
+        const batch = await managerRequest(
+            "/api4/trial-balance-batch"
         );
 
         output.textContent =
-            JSON.stringify(result, null, 2);
+            JSON.stringify(batch, null, 2);
+
+        if (
+            batch.status !== 200 ||
+            !batch.body.items ||
+            batch.body.items.length === 0
+        ) {
+            return;
+        }
+
+        // أول تقرير موجود
+        const key = batch.body.items[0].key;
+
+        // تحميل التقرير
+        const report = await managerRequest(
+            "/api4/trial-balance",
+            "GET",
+            {
+                Key: key
+            }
+        );
+
+        output.textContent =
+            JSON.stringify(report, null, 2);
 
     } catch (e) {
 
