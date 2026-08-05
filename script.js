@@ -1,16 +1,60 @@
 const output = document.getElementById("output");
 
+let requestId = 1;
+const pending = new Map();
+
+// استقبال الردود من Manager
+window.addEventListener("message", (event) => {
+
+    const data = event.data;
+
+    if (!data) return;
+
+    if (data.type !== "api-response") return;
+
+    const callback = pending.get(data.requestId);
+
+    if (!callback) return;
+
+    pending.delete(data.requestId);
+
+    callback(data);
+
+});
+
+// إرسال طلب إلى Manager
+function managerRequest(path, method = "GET", body = null) {
+
+    return new Promise((resolve) => {
+
+        const id = requestId++;
+
+        pending.set(id, resolve);
+
+        window.parent.postMessage({
+
+            type: "api-request",
+            requestId: id,
+            path,
+            method,
+            body
+
+        }, "*");
+
+    });
+
+}
+
+// اختبار الاتصال
 async function start() {
 
-    output.textContent = "Connecting to Manager...";
+    output.textContent = "Connecting...";
 
     try {
 
-        const r = await fetch("/api4/tabs");
+        const result = await managerRequest("/api4/tabs");
 
-        output.textContent =
-            "HTTP " + r.status + "\n\n" +
-            await r.text();
+        output.textContent = JSON.stringify(result, null, 2);
 
     } catch (e) {
 
