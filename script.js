@@ -52,7 +52,17 @@ async function start() {
 
     try {
 
-        const result = await managerRequest("/api4/reports");
+     const reports = await managerRequest("/api4/reports");
+
+const trialBalanceUrl =
+    reports.body._links.trialBalance.href;
+
+const result =
+    await managerRequest(trialBalanceUrl);
+
+output.textContent =
+    JSON.stringify(result, null, 2);
+    
 
         output.textContent = JSON.stringify(result, null, 2);
 
