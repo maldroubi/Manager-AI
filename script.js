@@ -52,7 +52,7 @@ async function start() {
 
     try {
 
-        const result = await managerRequest("/api4/tabs");
+        const result = await managerRequest("/api4/reports");
 
         output.textContent = JSON.stringify(result, null, 2);
 
