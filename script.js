@@ -3,13 +3,12 @@ const output = document.getElementById("output");
 let requestId = 1;
 const pending = new Map();
 
-// استقبال الردود من Manager
+// استقبال الرد من Manager
 window.addEventListener("message", (event) => {
 
     const data = event.data;
 
     if (!data) return;
-
     if (data.type !== "api-response") return;
 
     const callback = pending.get(data.requestId);
@@ -32,44 +31,29 @@ function managerRequest(path, method = "GET", body = null) {
         pending.set(id, resolve);
 
         window.parent.postMessage({
-
             type: "api-request",
             requestId: id,
             path,
             method,
             body
-
         }, "*");
 
     });
 
 }
 
-// اختبار الاتصال
 async function start() {
 
-    output.textContent = "Connecting...";
+    output.textContent = "Loading OpenAPI...";
 
     try {
 
-     const reports = await managerRequest("/api4/reports");
+        const result = await managerRequest(
+            "/openapi/get-trial-balance.json"
+        );
 
-const batch = await managerRequest(
-    reports.body._links.trialBalance.href
-);
-
-const first = batch.body.items[0];
-
-const result = await managerRequest(
-    first._links.self.href
-);
-
-output.textContent =
-    JSON.stringify(result, null, 2);
-    
-
-
-        output.textContent = JSON.stringify(result, null, 2);
+        output.textContent =
+            JSON.stringify(result, null, 2);
 
     } catch (e) {
 
