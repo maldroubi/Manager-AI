@@ -13,9 +13,16 @@ async function start() {
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        // قراءة تعريف التقرير
-        const definition = await manager.getTrialBalance(report.item.key);
+        const result =
+    await manager.getTrialBalanceView(report.item.key);
 
+console.log(result);
+
+output.textContent =
+    JSON.stringify(result.body, null, 2);
+
+
+    
         console.log("================================");
         console.log("Trial Balance Definition");
         console.log(definition);
