@@ -13,29 +13,16 @@ async function start() {
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        const result =
-    await manager.getTrialBalanceView(report.item.key);
-
-console.log(result);
-
-output.textContent =
-    JSON.stringify(result.body, null, 2);
-
-
-    
-        console.log("================================");
-        console.log("Trial Balance Definition");
-        console.log(definition);
-
-        // فتح التقرير الفعلي
-        const result = await viewApi.trialBalance(report);
+        // جلب بيانات التقرير الفعلية
+        const reportView =
+            await manager.getTrialBalanceView(report.item.key);
 
         console.log("================================");
         console.log("Trial Balance View");
-        console.log(result);
+        console.log(reportView);
 
         output.textContent =
-            JSON.stringify(result.view, null, 2);
+            JSON.stringify(reportView, null, 2);
 
     }
     catch (e) {
