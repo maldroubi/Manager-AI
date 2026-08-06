@@ -2,6 +2,7 @@ class Reports {
 
     constructor(manager) {
         this.manager = manager;
+        this.reportName = "Manager AI Audit";
     }
 
     async trialBalanceList() {
@@ -15,16 +16,24 @@ class Reports {
 
     }
 
-    async getLatestTrialBalance() {
+    async getAuditReport() {
 
         const list = await this.trialBalanceList();
 
-        if (!list.length)
-            throw new Error("No Trial Balance reports found.");
+        const report = list.find(r => {
 
-        list.sort((a, b) => b.item.timestamp - a.item.timestamp);
+            const title = (r.item.title || "").trim().toLowerCase();
 
-        return list[0];
+            return title === this.reportName.toLowerCase();
+
+        });
+
+        if (!report)
+            throw new Error(
+                `Trial Balance report "${this.reportName}" was not found.`
+            );
+
+        return report;
 
     }
 

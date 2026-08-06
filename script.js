@@ -2,18 +2,14 @@ const output = document.getElementById("output");
 
 async function start() {
 
-    output.textContent = "Loading...";
+    output.textContent = "Searching for Trial Balance report...";
 
     try {
 
-        const report =
-            await reports.getLatestTrialBalance();
-
-        const result =
-            await viewApi.trialBalance(report);
+        const report = await reports.getAuditReport();
 
         output.textContent =
-            JSON.stringify(result, null, 2);
+            JSON.stringify(report, null, 2);
 
     }
     catch (e) {
