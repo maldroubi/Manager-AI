@@ -1,5 +1,18 @@
 const output = document.getElementById("output");
 
+function extractTransactions(html) {
+
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    const table = doc.querySelector("table");
+
+    if (!table)
+        return null;
+
+    return table.outerHTML;
+
+}
+
 async function start() {
 
     output.innerHTML = "<p>Loading Trial Balance...</p>";
@@ -58,102 +71,137 @@ async function start() {
         });
 
         let html = `
-        <table>
-            <thead>
-                <tr>
-                    <th>Account</th>
-                    <th>Debit</th>
-                    <th>Credit</th>
-                </tr>
-            </thead>
-            <tbody>
+            <h2>Trial Balance</h2>
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>Account</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
         `;
 
         for (const a of accounts) {
 
             html += `
-            <tr>
 
-                <td>${a.account}</td>
+                <tr>
 
-                <td>
-                    ${
-                        a.debitLink
-                        ? `<a href="#" data-link="${a.debitLink}">${a.debit}</a>`
-                        : a.debit
-                    }
-                </td>
+                    <td>${a.account}</td>
 
-                <td>
-                    ${
-                        a.creditLink
-                        ? `<a href="#" data-link="${a.creditLink}">${a.credit}</a>`
-                        : a.credit
-                    }
-                </td>
+                    <td>
 
-            </tr>
+                        ${
+                            a.debitLink
+                            ? `<a href="#" data-link="${a.debitLink}">${a.debit}</a>`
+                            : a.debit
+                        }
+
+                    </td>
+
+                    <td>
+
+                        ${
+                            a.creditLink
+                            ? `<a href="#" data-link="${a.creditLink}">${a.credit}</a>`
+                            : a.credit
+                        }
+
+                    </td>
+
+                </tr>
+
             `;
 
         }
 
         html += `
-            </tbody>
-        </table>
 
-        <hr>
+                </tbody>
 
-        <div id="transactions">
+            </table>
+
+            <hr>
+
             <h2>Transactions</h2>
-            <p>Select an amount.</p>
-        </div>
+
+            <div id="transactions">
+
+                <p>Select an amount to load transactions.</p>
+
+            </div>
+
+            <hr>
+
+            <h2>AI Analysis</h2>
+
+            <div id="analysis">
+
+                No analysis yet.
+
+            </div>
+
         `;
 
         output.innerHTML = html;
 
-        output
-            .querySelectorAll("a[data-link]")
-            .forEach(link => {
+        output.querySelectorAll("a[data-link]").forEach(link => {
 
-                link.onclick = async e => {
+            link.onclick = async e => {
 
-                    e.preventDefault();
+                e.preventDefault();
 
-                    const box =
-                        document.getElementById("transactions");
+                const box =
+                    document.getElementById("transactions");
 
-                    box.innerHTML =
-                        "<p>Loading transactions...</p>";
+                box.innerHTML =
+                    "<p>Loading transactions...</p>";
 
-                    try {
+                try {
 
-                        const response =
-                            await manager.trialBalanceTransactions(
-                                link.dataset.link
-                            );
+                    const response =
+                        await manager.trialBalanceTransactions(
+                            link.dataset.link
+                        );
 
-                        console.log(response);
+                    const table =
+                        extractTransactions(response.body);
 
-                        box.innerHTML = `
-                            <h2>Transactions</h2>
-                            <pre>${JSON.stringify(response.body, null, 2)}</pre>
-                        `;
-
-                    }
-                    catch (err) {
-
-                        console.error(err);
+                    if (!table) {
 
                         box.innerHTML =
-                            `<p style="color:red">${err.message}</p>`;
+                            "<p>No transaction table found.</p>";
+
+                        return;
 
                     }
 
-                };
+                    box.innerHTML = table;
 
-            });
+                }
+
+                catch (err) {
+
+                    console.error(err);
+
+                    box.innerHTML =
+                        `<p style="color:red">${err.message}</p>`;
+
+                }
+
+            };
+
+        });
 
     }
+
     catch (e) {
 
         console.error(e);
