@@ -1,24 +1,44 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Manager AI</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<h1>Manager AI</h1>
+    <h1>Manager AI</h1>
 
-<button id="scan">
-Scan Company
-</button>
+    <button id="scan">
+        Scan Company
+    </button>
 
-<pre id="output"></pre>
+    <hr>
 
-<script src="manager-api.js"></script>
-<script src="reports.js"></script>
-<script src="view-api.js"></script>
-<script src="audit-engine.js"></script>
-<script src="script.js"></script>
+    <h2>Trial Balance</h2>
+    <div id="output"></div>
+
+    <hr>
+
+    <h2>Transactions</h2>
+    <div id="transactions">
+        <p>Select an amount to load transactions.</p>
+    </div>
+
+    <hr>
+
+    <h2>AI Analysis</h2>
+    <div id="analysis">
+        <p>No analysis yet.</p>
+    </div>
+
+    <script src="manager-api.js"></script>
+    <script src="reports.js"></script>
+    <script src="view-api.js"></script>
+    <script src="audit-engine.js"></script>
+    <script src="script.js"></script>
 
 </body>
+
 </html>

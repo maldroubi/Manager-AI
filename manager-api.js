@@ -72,13 +72,13 @@ class ManagerAPI {
 
     }
 
-   async getTrialBalanceView(key) {
+    async getTrialBalanceView(key) {
 
-    return await this.request(
-        `/api4/trial-balance-view?Key=${encodeURIComponent(key)}`
-    );
+        return await this.request(
+            `/api4/trial-balance-view?Key=${encodeURIComponent(key)}`
+        );
 
-}
+    }
 
     async createTrialBalance(body) {
 
@@ -97,6 +97,16 @@ class ManagerAPI {
             "PUT",
             body
         );
+
+    }
+
+    // =============================
+    // Trial Balance Transactions
+    // =============================
+
+    async trialBalanceTransactions(path) {
+
+        return await this.request(path);
 
     }
 
