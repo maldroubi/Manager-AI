@@ -6,23 +6,40 @@ async function start() {
 
     try {
 
-        // البحث عن التقرير الجاهز
+        // الحصول على التقرير الجاهز
         const report = await reports.getTrialBalanceReport();
 
         console.log("================================");
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        // جلب بيانات التقرير الفعلية
-        const reportView =
+        // الحصول على بيانات التقرير
+        const response =
             await manager.getTrialBalanceView(report.item.key);
 
         console.log("================================");
         console.log("Trial Balance View");
-        console.log(reportView);
+        console.log(response);
 
-        output.textContent =
-            JSON.stringify(reportView, null, 2);
+        if (response.status !== 200) {
+            throw new Error("Failed to load Trial Balance View");
+        }
+
+        const view = response.body;
+
+        console.log("================================");
+        console.log("Columns");
+        console.log(view.columns);
+
+        console.log("================================");
+        console.log("Rows");
+        console.log(view.rows.items);
+
+        output.textContent = JSON.stringify(
+            view.rows.items,
+            null,
+            2
+        );
 
     }
     catch (e) {
