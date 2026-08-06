@@ -6,14 +6,14 @@ async function start() {
 
     try {
 
-        // الحصول على التقرير الجاهز
+        // الحصول على تقرير Trial Balance الجاهز
         const report = await reports.getTrialBalanceReport();
 
         console.log("================================");
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        // الحصول على بيانات التقرير
+        // جلب بيانات التقرير
         const response =
             await manager.getTrialBalanceView(report.item.key);
 
@@ -35,8 +35,37 @@ async function start() {
         console.log("Rows");
         console.log(view.rows.items);
 
+        // تحويل شجرة التقرير إلى صفوف مسطحة
+        const flatRows = [];
+
+        function collectRows(node) {
+
+            if (!node) return;
+
+            if (!Array.isArray(node.items)) return;
+
+            for (const row of node.items) {
+
+                if (row.cells) {
+                    flatRows.push(row);
+                }
+
+                if (row.rows) {
+                    collectRows(row.rows);
+                }
+
+            }
+
+        }
+
+        collectRows(view.rows);
+
+        console.log("================================");
+        console.log("Flat Rows");
+        console.log(flatRows);
+
         output.textContent = JSON.stringify(
-            view.rows.items,
+            flatRows,
             null,
             2
         );
