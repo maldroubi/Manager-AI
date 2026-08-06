@@ -10,7 +10,7 @@ async function start() {
 
         console.log("================================");
         console.log("Selected Trial Balance Report");
-        console.log(report);
+        console.dir(report, { depth: null });
 
         const response =
             await manager.getTrialBalanceView(report.item.key);
@@ -20,6 +20,14 @@ async function start() {
         }
 
         const view = response.body;
+
+        console.log("================================");
+        console.log("Trial Balance View");
+        console.dir(view, { depth: null });
+
+        console.log("================================");
+        console.log("Columns");
+        console.dir(view.columns, { depth: null });
 
         const flatRows = [];
 
@@ -43,44 +51,23 @@ async function start() {
         collectRows(view.rows);
 
         console.log("================================");
-        console.log("Flat Rows");
-        console.log(flatRows);
+        console.log("Rows Count");
+        console.log(flatRows.length);
 
-        const accounts = [];
+        if (flatRows.length > 0) {
 
-        for (const row of flatRows) {
+            console.log("================================");
+            console.log("First Row");
+            console.dir(flatRows[0], { depth: null });
 
-            const cells = row.cells || [];
-
-            accounts.push({
-
-                account: row.displayName || "",
-
-                debit:
-                    cells[0]?.value ?? null,
-
-                credit:
-                    cells[1]?.value ?? null,
-
-                balance:
-                    cells[2]?.value ?? null,
-
-                totalRow:
-                    row.isTotalRow,
-
-                standout:
-                    row.makeStandOut
-
-            });
+            console.log("================================");
+            console.log("First Row Cells");
+            console.dir(flatRows[0].cells, { depth: null });
 
         }
 
-        console.log("================================");
-        console.log("Accounts");
-        console.table(accounts);
-
         output.textContent =
-            JSON.stringify(accounts, null, 2);
+            JSON.stringify(flatRows[0], null, 2);
 
     }
     catch (e) {
