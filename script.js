@@ -6,27 +6,29 @@ async function start() {
 
     try {
 
-        const report =
-            await reports.getTrialBalanceReport();
+        // البحث عن التقرير الجاهز
+        const report = await reports.getTrialBalanceReport();
 
+        console.log("================================");
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        const definition = await manager.getTrialBalance(report.key);
+        // قراءة تعريف التقرير
+        const definition = await manager.getTrialBalance(report.item.key);
 
-console.log("Definition");
-console.log(definition);
+        console.log("================================");
+        console.log("Trial Balance Definition");
+        console.log(definition);
 
-const view = await manager.getTrialBalanceView(
-    definition.body.key
-);
+        // فتح التقرير الفعلي
+        const result = await viewApi.trialBalance(report);
 
-console.log("View");
-console.log(view);
+        console.log("================================");
+        console.log("Trial Balance View");
+        console.log(result);
 
-output.textContent =
-    JSON.stringify(view, null, 2);
-    
+        output.textContent =
+            JSON.stringify(result.view, null, 2);
 
     }
     catch (e) {
@@ -34,7 +36,7 @@ output.textContent =
         console.error(e);
 
         output.textContent =
-            e.message;
+            e.stack || e.message;
 
     }
 
