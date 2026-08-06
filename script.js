@@ -12,14 +12,21 @@ async function start() {
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        const result =
-            await manager.getTrialBalance(report.key);
+        const definition = await manager.getTrialBalance(report.key);
 
-        console.log("Trial Balance Definition");
-        console.log(result);
+console.log("Definition");
+console.log(definition);
 
-        output.textContent =
-            JSON.stringify(result, null, 2);
+const view = await manager.getTrialBalanceView(
+    definition.body.key
+);
+
+console.log("View");
+console.log(view);
+
+output.textContent =
+    JSON.stringify(view, null, 2);
+    
 
     }
     catch (e) {
