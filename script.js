@@ -2,19 +2,32 @@ const output = document.getElementById("output");
 
 async function start() {
 
-    output.textContent = "Searching for Trial Balance report...";
+    output.textContent = "Loading Trial Balance...";
 
     try {
 
-        const report = await reports.getAuditReport();
+        const report =
+            await reports.getTrialBalanceReport();
+
+        console.log("Selected Trial Balance Report");
+        console.log(report);
+
+        const result =
+            await manager.getTrialBalance(report.key);
+
+        console.log("Trial Balance Definition");
+        console.log(result);
 
         output.textContent =
-            JSON.stringify(report, null, 2);
+            JSON.stringify(result, null, 2);
 
     }
     catch (e) {
 
-        output.textContent = e.message;
+        console.error(e);
+
+        output.textContent =
+            e.message;
 
     }
 

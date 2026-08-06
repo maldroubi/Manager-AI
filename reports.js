@@ -16,21 +16,18 @@ class Reports {
 
     }
 
-    async getAuditReport() {
+    async getTrialBalanceReport() {
 
         const list = await this.trialBalanceList();
 
-        const report = list.find(r => {
-
-            const title = (r.item.title || "").trim().toLowerCase();
-
-            return title === this.reportName.toLowerCase();
-
-        });
+        const report = list.find(r =>
+            (r.item.title || "").trim().toLowerCase() ===
+            this.reportName.toLowerCase()
+        );
 
         if (!report)
             throw new Error(
-                `Trial Balance report "${this.reportName}" was not found.`
+                `Trial Balance report "${this.reportName}" not found.`
             );
 
         return report;
