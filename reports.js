@@ -1,5 +1,3 @@
-// reports.js
-
 class Reports {
 
     constructor(manager) {
@@ -8,31 +6,12 @@ class Reports {
 
     async trialBalanceList() {
 
-        const result = await this.manager.trialBalanceReports();
+        const response = await this.manager.trialBalanceBatch();
 
-        if (result.status !== 200) {
-            throw new Error("Unable to load Trial Balance list.");
-        }
+        if (response.status !== 200)
+            throw new Error("Unable to load Trial Balance reports.");
 
-        return result.body.items || [];
-
-    }
-
-    async getTrialBalanceById(id) {
-
-        const list = await this.trialBalanceList();
-
-        return list.find(r => r.item.id === id) || null;
-
-    }
-
-    async getTrialBalanceByTitle(title) {
-
-        const list = await this.trialBalanceList();
-
-        return list.find(r =>
-            (r.item.title || "").toLowerCase() === title.toLowerCase()
-        ) || null;
+        return response.body.items || [];
 
     }
 
@@ -40,11 +19,10 @@ class Reports {
 
         const list = await this.trialBalanceList();
 
-        if (!list.length) return null;
+        if (!list.length)
+            throw new Error("No Trial Balance reports found.");
 
-        list.sort((a, b) =>
-            b.item.timestamp - a.item.timestamp
-        );
+        list.sort((a, b) => b.item.timestamp - a.item.timestamp);
 
         return list[0];
 
