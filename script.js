@@ -6,20 +6,14 @@ async function start() {
 
     try {
 
-        // الحصول على تقرير Trial Balance الجاهز
         const report = await reports.getTrialBalanceReport();
 
         console.log("================================");
         console.log("Selected Trial Balance Report");
         console.log(report);
 
-        // جلب بيانات التقرير
         const response =
             await manager.getTrialBalanceView(report.item.key);
-
-        console.log("================================");
-        console.log("Trial Balance View");
-        console.log(response);
 
         if (response.status !== 200) {
             throw new Error("Failed to load Trial Balance View");
@@ -27,32 +21,20 @@ async function start() {
 
         const view = response.body;
 
-        console.log("================================");
-        console.log("Columns");
-        console.log(view.columns);
-
-        console.log("================================");
-        console.log("Rows");
-        console.log(view.rows.items);
-
-        // تحويل شجرة التقرير إلى صفوف مسطحة
         const flatRows = [];
 
         function collectRows(node) {
 
-            if (!node) return;
-
-            if (!Array.isArray(node.items)) return;
+            if (!node || !Array.isArray(node.items))
+                return;
 
             for (const row of node.items) {
 
-                if (row.cells) {
+                if (row.cells)
                     flatRows.push(row);
-                }
 
-                if (row.rows) {
+                if (row.rows)
                     collectRows(row.rows);
-                }
 
             }
 
@@ -64,11 +46,41 @@ async function start() {
         console.log("Flat Rows");
         console.log(flatRows);
 
-        output.textContent = JSON.stringify(
-            flatRows,
-            null,
-            2
-        );
+        const accounts = [];
+
+        for (const row of flatRows) {
+
+            const cells = row.cells || [];
+
+            accounts.push({
+
+                account: row.displayName || "",
+
+                debit:
+                    cells[0]?.value ?? null,
+
+                credit:
+                    cells[1]?.value ?? null,
+
+                balance:
+                    cells[2]?.value ?? null,
+
+                totalRow:
+                    row.isTotalRow,
+
+                standout:
+                    row.makeStandOut
+
+            });
+
+        }
+
+        console.log("================================");
+        console.log("Accounts");
+        console.table(accounts);
+
+        output.textContent =
+            JSON.stringify(accounts, null, 2);
 
     }
     catch (e) {
