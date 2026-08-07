@@ -140,11 +140,11 @@ async function start() {
 
             <hr>
 
-            <h2>AI Analysis</h2>
+            <h2>Audit Findings</h2>
 
             <div id="analysis">
 
-                No analysis yet.
+                Select a transaction.
 
             </div>
 
@@ -161,8 +161,14 @@ async function start() {
                 const box =
                     document.getElementById("transactions");
 
+                const analysis =
+                    document.getElementById("analysis");
+
                 box.innerHTML =
                     "<p>Loading transactions...</p>";
+
+                analysis.innerHTML =
+                    "<p>Analyzing...</p>";
 
                 try {
 
@@ -170,18 +176,16 @@ async function start() {
                         await manager.trialBalanceTransactions(
                             link.dataset.link
                         );
-                   console.log(response.body.substring(0, 1000));
-                   
-                        const entry =
-    extractor.extract(response.body);
 
-console.log("ENTRY");
+                    const entry =
+                        extractor.extract(response.body);
 
-console.log(entry);
+                    const findings =
+                        audit.analyze(entry);
 
+                    analysis.innerHTML =
+                        audit.render(findings);
 
-
-                        
                     const table =
                         extractTransactions(response.body);
 
@@ -196,17 +200,13 @@ console.log(entry);
 
                     box.innerHTML = `
 
-    ${table}
+${table}
 
-    <hr>
+<hr>
 
-    <h3>Extracted Entry</h3>
+<h3>Extracted Entry</h3>
 
-    <pre>
-
-${JSON.stringify(entry, null, 4)}
-
-    </pre>
+<pre>${JSON.stringify(entry, null, 4)}</pre>
 
 `;
 
@@ -215,6 +215,9 @@ ${JSON.stringify(entry, null, 4)}
                 catch (err) {
 
                     console.error(err);
+
+                    analysis.innerHTML =
+                        `<p style="color:red">${err.message}</p>`;
 
                     box.innerHTML =
                         `<p style="color:red">${err.message}</p>`;

@@ -2,108 +2,127 @@
 
 class AuditEngine {
 
-    analyze(report) {
+    analyze(entry) {
 
         const findings = [];
 
-        if (!report) {
+        if (!entry) {
 
             findings.push({
                 severity: "error",
-                title: "No Trial Balance",
-                message: "No Trial Balance has been loaded."
+                title: "No Entry",
+                message: "No accounting entry loaded."
             });
 
             return findings;
 
         }
 
-        const rows = report.rows?.items || [];
-
-        if (rows.length === 0) {
+        if (!entry.lines || entry.lines.length === 0) {
 
             findings.push({
                 severity: "warning",
-                title: "Empty Trial Balance",
-                message: "The report does not contain any rows."
+                title: "Empty Entry",
+                message: "No posting lines found."
             });
+
+            return findings;
 
         }
 
-        this.scanRows(rows, findings);
+        for (const line of entry.lines) {
+
+            const account = (line.account || "").toLowerCase();
+
+            const debit = Number(line.debit || 0);
+
+            const credit = Number(line.credit || 0);
+
+            if (account.includes("receivable") && credit > 0) {
+
+                findings.push({
+
+                    severity: "warning",
+
+                    title: "Accounts Receivable",
+
+                    message:
+                        "Credit posting detected on Accounts Receivable.",
+
+                    line
+
+                });
+
+            }
+
+            if (account.includes("payable") && debit > 0) {
+
+                findings.push({
+
+                    severity: "warning",
+
+                    title: "Accounts Payable",
+
+                    message:
+                        "Debit posting detected on Accounts Payable.",
+
+                    line
+
+                });
+
+            }
+
+            if (account.includes("suspense")) {
+
+                findings.push({
+
+                    severity: "warning",
+
+                    title: "Suspense Account",
+
+                    message:
+                        "Posting detected in Suspense account. Review required.",
+
+                    line
+
+                });
+
+            }
+
+        }
+
+        if (findings.length === 0) {
+
+            findings.push({
+
+                severity: "success",
+
+                title: "No Findings",
+
+                message:
+                    "No accounting issues detected."
+
+            });
+
+        }
 
         return findings;
 
     }
 
-    scanRows(rows, findings) {
+    render(findings) {
 
-        for (const row of rows) {
+        return findings.map(f => `
 
-            if (row.cells) {
+<div class="audit-card ${f.severity}">
 
-                this.analyzeRow(row, findings);
+<h3>${f.title}</h3>
 
-            }
+<p>${f.message}</p>
 
-            if (row.rows?.items?.length) {
+</div>
 
-                this.scanRows(row.rows.items, findings);
-
-            }
-
-        }
-
-    }
-
-    analyzeRow(row, findings) {
-
-        const name = row.displayName || "";
-
-        const cells = row.cells || [];
-
-        const debit = cells[0]?.value;
-        const credit = cells[1]?.value;
-
-        if (
-            debit != null &&
-            credit != null &&
-            debit !== 0 &&
-            credit !== 0
-        ) {
-
-            findings.push({
-
-                severity: "warning",
-
-                account: name,
-
-                title: "Debit and Credit on same row",
-
-                message:
-                    "This account contains values in both columns and should be reviewed.",
-
-                row
-
-            });
-
-        }
-
-        if (row.isTotalRow) {
-
-            findings.push({
-
-                severity: "info",
-
-                account: name,
-
-                title: "Total Row",
-
-                message: "Summary row."
-
-            });
-
-        }
+`).join("");
 
     }
 
