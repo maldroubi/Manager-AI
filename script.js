@@ -170,7 +170,7 @@ async function start() {
                         await manager.trialBalanceTransactions(
                             link.dataset.link
                         );
-                   
+                   console.log(response.body.substring(0, 1000));
                    
                         const entry =
     extractor.extract(response.body);
