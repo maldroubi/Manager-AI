@@ -2,19 +2,6 @@
 
 class AuditEngine {
 
-    constructor() {
-
-        this.rules = [
-
-            this.checkSuspenseBalance,
-            this.checkNegativeInventoryClearing,
-            this.checkReceivableCreditBalance,
-            this.checkPayableDebitBalance
-
-        ];
-
-    }
-
     analyze(report) {
 
         const findings = [];
@@ -24,14 +11,26 @@ class AuditEngine {
             findings.push({
                 severity: "error",
                 title: "No Trial Balance",
-                message: "No Trial Balance loaded."
+                message: "No Trial Balance has been loaded."
             });
 
             return findings;
 
         }
 
-        this.scanRows(report.rows?.items || [], findings);
+        const rows = report.rows?.items || [];
+
+        if (rows.length === 0) {
+
+            findings.push({
+                severity: "warning",
+                title: "Empty Trial Balance",
+                message: "The report does not contain any rows."
+            });
+
+        }
+
+        this.scanRows(rows, findings);
 
         return findings;
 
@@ -43,14 +42,7 @@ class AuditEngine {
 
             if (row.cells) {
 
-                for (const rule of this.rules) {
-
-                    const result = rule.call(this, row);
-
-                    if (result)
-                        findings.push(result);
-
-                }
+                this.analyzeRow(row, findings);
 
             }
 
@@ -64,120 +56,54 @@ class AuditEngine {
 
     }
 
-    //----------------------------------------------------
-    // Rules
-    //----------------------------------------------------
+    analyzeRow(row, findings) {
 
-    checkSuspenseBalance(row) {
+        const name = row.displayName || "";
 
-        const account = (row.displayName || "").toLowerCase();
+        const cells = row.cells || [];
 
-        if (!account.includes("suspense"))
-            return null;
+        const debit = cells[0]?.value;
+        const credit = cells[1]?.value;
 
-        const debit = Number(row.cells?.[0]?.value || 0);
-        const credit = Number(row.cells?.[1]?.value || 0);
+        if (
+            debit != null &&
+            credit != null &&
+            debit !== 0 &&
+            credit !== 0
+        ) {
 
-        if (debit === 0 && credit === 0)
-            return null;
+            findings.push({
 
-        return {
+                severity: "warning",
 
-            severity: "warning",
+                account: name,
 
-            account: row.displayName,
+                title: "Debit and Credit on same row",
 
-            title: "Suspense Account Balance",
+                message:
+                    "This account contains values in both columns and should be reviewed.",
 
-            message:
-                "Suspense account still contains a balance. Review the postings."
+                row
 
-        };
+            });
 
-    }
+        }
 
-    checkNegativeInventoryClearing(row) {
+        if (row.isTotalRow) {
 
-        const account = (row.displayName || "").toLowerCase();
+            findings.push({
 
-        if (!account.includes("inventory"))
-            return null;
+                severity: "info",
 
-        if (!account.includes("clearing"))
-            return null;
+                account: name,
 
-        const debit = Number(row.cells?.[0]?.value || 0);
-        const credit = Number(row.cells?.[1]?.value || 0);
+                title: "Total Row",
 
-        if (debit === 0 && credit === 0)
-            return null;
+                message: "Summary row."
 
-        return {
+            });
 
-            severity: "warning",
-
-            account: row.displayName,
-
-            title: "Inventory Clearing Balance",
-
-            message:
-                "Inventory Clearing should normally return to zero."
-
-        };
-
-    }
-
-    checkReceivableCreditBalance(row) {
-
-        const account = (row.displayName || "").toLowerCase();
-
-        if (!account.includes("receivable"))
-            return null;
-
-        const credit = Number(row.cells?.[1]?.value || 0);
-
-        if (credit === 0)
-            return null;
-
-        return {
-
-            severity: "warning",
-
-            account: row.displayName,
-
-            title: "Receivable Credit Balance",
-
-            message:
-                "Receivable account contains a credit balance."
-
-        };
-
-    }
-
-    checkPayableDebitBalance(row) {
-
-        const account = (row.displayName || "").toLowerCase();
-
-        if (!account.includes("payable"))
-            return null;
-
-        const debit = Number(row.cells?.[0]?.value || 0);
-
-        if (debit === 0)
-            return null;
-
-        return {
-
-            severity: "warning",
-
-            account: row.displayName,
-
-            title: "Payable Debit Balance",
-
-            message:
-                "Payable account contains a debit balance."
-
-        };
+        }
 
     }
 
