@@ -170,7 +170,18 @@ async function start() {
                         await manager.trialBalanceTransactions(
                             link.dataset.link
                         );
+                   
+                   
+                        const entry =
+    extractor.extract(response.body);
 
+console.log("ENTRY");
+
+console.log(entry);
+
+
+
+                        
                     const table =
                         extractTransactions(response.body);
 
@@ -183,7 +194,21 @@ async function start() {
 
                     }
 
-                    box.innerHTML = table;
+                    box.innerHTML = `
+
+    ${table}
+
+    <hr>
+
+    <h3>Extracted Entry</h3>
+
+    <pre>
+
+${JSON.stringify(entry, null, 4)}
+
+    </pre>
+
+`;
 
                 }
 
