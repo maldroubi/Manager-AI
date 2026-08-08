@@ -138,6 +138,38 @@ class EntryExtractor {
                 if (/\bDr\b/i.test(amountText))
                     score += 10;
 
+                // Manager may render the amount and the Dr/Cr suffix
+                // in separate DOM nodes (e.g. "AED 1,138,957.16" and
+                // "Cr").  If the amount itself has no suffix, inspect
+                // its nearby ancestors before defaulting to an unknown
+                // side.  This is essential for credit account totals.
+                let side = /\bCr\b/i.test(amountText)
+                    ? "credit"
+                    : /\bDr\b/i.test(amountText)
+                        ? "debit"
+                        : "";
+
+                if (!side) {
+                    let context = element;
+
+                    for (let level = 0; level < 6 && context; level++) {
+                        const contextText = this.clean(context);
+
+                        // Prefer an explicit suffix near the exact amount.
+                        if (/\bCr\b/i.test(contextText)) {
+                            side = "credit";
+                            break;
+                        }
+
+                        if (/\bDr\b/i.test(contextText)) {
+                            side = "debit";
+                            break;
+                        }
+
+                        context = context.parentElement;
+                    }
+                }
+
                 candidates.push({
                     value,
                     score,
@@ -148,11 +180,7 @@ class EntryExtractor {
                             : /\bUSD\b|\$/i.test(amountText)
                                 ? "USD"
                                 : "",
-                    side: /\bCr\b/i.test(amountText)
-                        ? "credit"
-                        : /\bDr\b/i.test(amountText)
-                            ? "debit"
-                            : ""
+                    side
                 });
             }
         }
