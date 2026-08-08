@@ -197,21 +197,16 @@ function getLatestTransaction(
  * Compare Balance Sheet balance
  * with latest transaction balance.
  */
-function checkBalance(account) {
+function checkBalance(account, finalBalance) {
 
     const balanceSheetBalance =
-        getBalanceSheetBalance(
-            account
-        );
+        getBalanceSheetBalance(account);
 
 
-    const latestTransaction =
-        getLatestTransaction(
-            account.transactions
-        );
-
-
-    if (!latestTransaction) {
+    if (
+        !finalBalance ||
+        finalBalance.value === undefined
+    ) {
 
         return {
 
@@ -232,18 +227,12 @@ function checkBalance(account) {
 
 
     const transactionBalance =
-        parseSignedBalance(
-            latestTransaction.balance
-        );
+        Number(finalBalance.value) || 0;
 
 
     const difference =
         balanceSheetBalance -
         transactionBalance;
-
-
-    const matches =
-        Math.abs(difference) < 0.01;
 
 
     return {
@@ -256,10 +245,10 @@ function checkBalance(account) {
 
         difference,
 
-        matches,
+        matches:
+            Math.abs(difference) < 0.01,
 
-        transaction:
-            latestTransaction
+        transaction: null
 
     };
 }
@@ -887,23 +876,15 @@ async function start() {
                                     );
 
 
-                                account.transactions =
-                                    extracted
-                                        .transactions ||
-                                    [];
+                               account.transactions =
+    extracted.transactions || [];
 
 
-                                /*
-                                 * --------------------------------
-                                 * NEW:
-                                 * Balance Sheet vs Transactions
-                                 * --------------------------------
-                                 */
-
-                                const balanceCheck =
-                                    checkBalance(
-                                        account
-                                    );
+const balanceCheck =
+    checkBalance(
+        account,
+        extracted.finalBalance
+    );
 
 
                                 /*
