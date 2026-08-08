@@ -215,7 +215,10 @@ function checkBalance(
             accountDetailBalance &&
             Number.isFinite(Number(accountDetailBalance.value))
         ) {
-            const comparedBalance = Number(accountDetailBalance.value);
+            const comparedBalance =
+                Number(accountDetailBalance.value) *
+                (String(accountDetailBalance.side || '').toLowerCase() === 'credit' ? -1 : 1);
+
             const difference = balanceSheetBalance - comparedBalance;
 
             return {
@@ -257,7 +260,10 @@ function checkBalance(
         };
     }
 
-    const transactionBalance = Number(finalBalance.value) || 0;
+    const transactionBalance =
+        (Number(finalBalance.value) || 0) *
+        (String(finalBalance.side || '').toLowerCase() === 'credit' ? -1 : 1);
+
     const difference = balanceSheetBalance - transactionBalance;
 
     return {
