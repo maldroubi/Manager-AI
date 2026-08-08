@@ -93,6 +93,8 @@ class EntryExtractor {
                 if (td.length < 3)
                     return;
 
+                console.log(td.map(x => x.innerText.trim()));
+                
                 rows.push({
 
                     account:
