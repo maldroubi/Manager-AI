@@ -51,6 +51,7 @@ class EntryExtractor {
     finalBalance,
     hasTransactionLedger: true
 };
+    }
 
 
     // ==================================================
