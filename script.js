@@ -11,17 +11,13 @@ function extractTransactions(html) {
                 "text/html"
             );
 
-
     const table =
         doc.querySelector("table");
-
 
     if (!table)
         return null;
 
-
     return table.outerHTML;
-
 }
 
 
@@ -30,28 +26,23 @@ async function start() {
     output.innerHTML =
         "<p>Loading Trial Balance...</p>";
 
-
     try {
 
         const report =
             await reports.getTrialBalanceReport();
-
 
         const response =
             await manager.getTrialBalanceView(
                 report.item.key
             );
 
-
         if (response.status !== 200)
             throw new Error(
                 "Failed to load Trial Balance View"
             );
 
-
         const view =
             response.body;
-
 
         const flatRows = [];
 
@@ -64,12 +55,10 @@ async function start() {
             )
                 return;
 
-
             for (const row of node.items) {
 
                 if (row.cells)
                     flatRows.push(row);
-
 
                 if (row.rows)
                     collectRows(row.rows);
@@ -87,7 +76,6 @@ async function start() {
 
                 const cells =
                     row.cells || [];
-
 
                 return {
 
@@ -117,7 +105,6 @@ async function start() {
                 Trial Balance
             </h2>
 
-
             <table>
 
                 <thead>
@@ -140,7 +127,6 @@ async function start() {
 
                 </thead>
 
-
                 <tbody>
 
         `;
@@ -155,7 +141,6 @@ async function start() {
                     <td>
                         ${a.account}
                     </td>
-
 
                     <td>
 
@@ -182,7 +167,6 @@ async function start() {
                         }
 
                     </td>
-
 
                     <td>
 
@@ -217,6 +201,12 @@ async function start() {
         }
 
 
+        /*
+         * ------------------------------------------------
+         * Main transaction / audit layout
+         * ------------------------------------------------
+         */
+
         html += `
 
                 </tbody>
@@ -245,13 +235,49 @@ async function start() {
 
 
             <h2>
+                Account Being Audited
+            </h2>
+
+
+            <div id="account-audited">
+
+                <p>
+                    Select an account to audit.
+                </p>
+
+            </div>
+
+
+            <hr>
+
+
+            <h2>
                 Audit Findings
             </h2>
 
 
             <div id="analysis">
 
-                Select an account to audit.
+                <p>
+                    Select an account to audit.
+                </p>
+
+            </div>
+
+
+            <hr>
+
+
+            <h2>
+                Transactions
+            </h2>
+
+
+            <div id="transactions-secondary">
+
+                <p>
+                    Select an amount to load transactions.
+                </p>
 
             </div>
 
@@ -261,6 +287,12 @@ async function start() {
         output.innerHTML =
             html;
 
+
+        /*
+         * ------------------------------------------------
+         * Account links
+         * ------------------------------------------------
+         */
 
         output
             .querySelectorAll(
@@ -281,6 +313,18 @@ async function start() {
                             );
 
 
+                        const secondaryBox =
+                            document.getElementById(
+                                "transactions-secondary"
+                            );
+
+
+                        const accountBox =
+                            document.getElementById(
+                                "account-audited"
+                            );
+
+
                         const analysis =
                             document.getElementById(
                                 "analysis"
@@ -291,6 +335,14 @@ async function start() {
                             "<p>Loading transactions...</p>";
 
 
+                        secondaryBox.innerHTML =
+                            "<p>Loading transactions...</p>";
+
+
+                        accountBox.innerHTML =
+                            "<p>Loading account...</p>";
+
+
                         analysis.innerHTML =
                             "<p>Analyzing account...</p>";
 
@@ -299,9 +351,9 @@ async function start() {
 
 
                             /*
-                             * ---------------------------------
+                             * --------------------------------
                              * Account selected from Trial Balance
-                             * ---------------------------------
+                             * --------------------------------
                              */
 
                             const account = {
@@ -321,9 +373,9 @@ async function start() {
 
 
                             /*
-                             * ---------------------------------
+                             * --------------------------------
                              * Load transaction history
-                             * ---------------------------------
+                             * --------------------------------
                              */
 
                             const response =
@@ -334,9 +386,9 @@ async function start() {
 
 
                             /*
-                             * ---------------------------------
+                             * --------------------------------
                              * Extract transactions
-                             * ---------------------------------
+                             * --------------------------------
                              */
 
                             const extracted =
@@ -350,54 +402,12 @@ async function start() {
 
 
                             /*
-                             * ---------------------------------
-                             * Audit
-                             * ---------------------------------
+                             * --------------------------------
+                             * Display Account Being Audited
+                             * --------------------------------
                              */
 
-                            const findings =
-                                audit.analyze(
-                                    account
-                                );
-
-
-                            analysis.innerHTML =
-                                audit.render(
-                                    findings
-                                );
-
-
-                            /*
-                             * ---------------------------------
-                             * Display transaction table
-                             * ---------------------------------
-                             */
-
-                            const table =
-                                extractTransactions(
-                                    response.body
-                                );
-
-
-                            if (!table) {
-
-                                box.innerHTML =
-                                    "<p>No transaction table found.</p>";
-
-                                return;
-
-                            }
-
-
-                            box.innerHTML = `
-
-                                ${table}
-
-                                <hr>
-
-                                <h3>
-                                    Account Being Audited
-                                </h3>
+                            accountBox.innerHTML = `
 
                                 <pre>${JSON.stringify(
                                     {
@@ -419,12 +429,88 @@ async function start() {
 
                             `;
 
+
+                            /*
+                             * --------------------------------
+                             * Run Audit
+                             * --------------------------------
+                             */
+
+                            const findings =
+                                audit.analyze(
+                                    account
+                                );
+
+
+                            analysis.innerHTML =
+                                audit.render(
+                                    findings
+                                );
+
+
+                            /*
+                             * --------------------------------
+                             * Extract original transaction table
+                             * --------------------------------
+                             */
+
+                            const table =
+                                extractTransactions(
+                                    response.body
+                                );
+
+
+                            if (!table) {
+
+                                box.innerHTML =
+                                    "<p>No transaction table found.</p>";
+
+                                secondaryBox.innerHTML =
+                                    "<p>No transaction table found.</p>";
+
+                                return;
+
+                            }
+
+
+                            /*
+                             * --------------------------------
+                             * First Transactions box
+                             * --------------------------------
+                             */
+
+                            box.innerHTML =
+                                table;
+
+
+                            /*
+                             * --------------------------------
+                             * Second Transactions box
+                             *
+                             * Keep the original layout.
+                             * --------------------------------
+                             */
+
+                            secondaryBox.innerHTML =
+                                table;
+
                         }
 
 
                         catch (err) {
 
                             console.error(err);
+
+
+                            accountBox.innerHTML = `
+
+                                <p style="color:red">
+
+                                    ${err.message}
+
+                                </p>
+
+                            `;
 
 
                             analysis.innerHTML = `
@@ -448,6 +534,17 @@ async function start() {
 
                             `;
 
+
+                            secondaryBox.innerHTML = `
+
+                                <p style="color:red">
+
+                                    ${err.message}
+
+                                </p>
+
+                            `;
+
                         }
 
                     };
@@ -460,7 +557,6 @@ async function start() {
     catch (e) {
 
         console.error(e);
-
 
         output.textContent =
             e.stack ||
