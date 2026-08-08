@@ -2,94 +2,190 @@
 
 class AuditEngine {
 
-    analyze(entry) {
+    analyze(account) {
 
         const findings = [];
 
-        if (!entry) {
+        if (!account) {
 
             findings.push({
+
                 severity: "error",
-                title: "No Entry",
-                message: "No accounting entry loaded."
+
+                title: "No Account",
+
+                message:
+                    "No balance sheet account was supplied."
+
             });
 
             return findings;
 
         }
 
-        if (!entry.lines || entry.lines.length === 0) {
+
+        const name =
+            String(account.name || "")
+                .trim();
+
+
+        const debit =
+            this.toNumber(account.debit);
+
+
+        const credit =
+            this.toNumber(account.credit);
+
+
+        const transactions =
+            Array.isArray(account.transactions)
+                ? account.transactions
+                : [];
+
+
+        /*
+         * --------------------------------------------------
+         * Rule 1
+         *
+         * Accounts Receivable should normally have
+         * a debit balance.
+         *
+         * We only flag a credit balance.
+         * --------------------------------------------------
+         */
+
+        if (
+            this.isReceivable(name) &&
+            credit > 0
+        ) {
 
             findings.push({
+
                 severity: "warning",
-                title: "Empty Entry",
-                message: "No posting lines found."
+
+                title:
+                    "Abnormal Receivable Balance",
+
+                message:
+                    `${name} has a credit balance of ${credit}.`,
+
+                recommendation:
+                    "Review the postings affecting this receivable account.",
+
+                confidence:
+                    "high",
+
+                account: name,
+
+                balance: {
+
+                    debit,
+
+                    credit
+
+                }
+
             });
 
-            return findings;
+        }
+
+
+        /*
+         * --------------------------------------------------
+         * Rule 2
+         *
+         * Accounts Payable should normally have
+         * a credit balance.
+         *
+         * We only flag a debit balance.
+         * --------------------------------------------------
+         */
+
+        if (
+            this.isPayable(name) &&
+            debit > 0
+        ) {
+
+            findings.push({
+
+                severity: "warning",
+
+                title:
+                    "Abnormal Payable Balance",
+
+                message:
+                    `${name} has a debit balance of ${debit}.`,
+
+                recommendation:
+                    "Review the postings affecting this payable account.",
+
+                confidence:
+                    "high",
+
+                account: name,
+
+                balance: {
+
+                    debit,
+
+                    credit
+
+                }
+
+            });
 
         }
 
-        for (const line of entry.lines) {
 
-            const account = (line.account || "").toLowerCase();
+        /*
+         * --------------------------------------------------
+         * Rule 3
+         *
+         * Suspense account with remaining balance.
+         * --------------------------------------------------
+         */
 
-            const debit = Number(line.debit || 0);
+        if (
+            this.isSuspense(name) &&
+            (debit > 0 || credit > 0)
+        ) {
 
-            const credit = Number(line.credit || 0);
+            findings.push({
 
-            if (account.includes("receivable") && credit > 0) {
+                severity: "warning",
 
-                findings.push({
+                title:
+                    "Suspense Account Has Balance",
 
-                    severity: "warning",
+                message:
+                    `${name} has a remaining balance.`,
 
-                    title: "Accounts Receivable",
+                recommendation:
+                    "Review and clear the suspense balance.",
 
-                    message:
-                        "Credit posting detected on Accounts Receivable.",
+                confidence:
+                    "high",
 
-                    line
+                account: name,
 
-                });
+                balance: {
 
-            }
+                    debit,
 
-            if (account.includes("payable") && debit > 0) {
+                    credit
 
-                findings.push({
+                }
 
-                    severity: "warning",
-
-                    title: "Accounts Payable",
-
-                    message:
-                        "Debit posting detected on Accounts Payable.",
-
-                    line
-
-                });
-
-            }
-
-            if (account.includes("suspense")) {
-
-                findings.push({
-
-                    severity: "warning",
-
-                    title: "Suspense Account",
-
-                    message:
-                        "Posting detected in Suspense account. Review required.",
-
-                    line
-
-                });
-
-            }
+            });
 
         }
+
+
+        /*
+         * --------------------------------------------------
+         * No findings
+         * --------------------------------------------------
+         */
 
         if (findings.length === 0) {
 
@@ -97,35 +193,123 @@ class AuditEngine {
 
                 severity: "success",
 
-                title: "No Findings",
+                title:
+                    "No Findings",
 
                 message:
-                    "No accounting issues detected."
+                    "No balance-sheet rule was triggered for this account.",
+
+                account: name,
+
+                transactionCount:
+                    transactions.length
 
             });
 
         }
 
+
         return findings;
 
     }
 
+
+    isReceivable(name) {
+
+        const value =
+            name.toLowerCase();
+
+        return (
+            value.includes("accounts receivable") ||
+            value.includes("account receivable") ||
+            value.includes("receivable")
+        );
+
+    }
+
+
+    isPayable(name) {
+
+        const value =
+            name.toLowerCase();
+
+        return (
+            value.includes("accounts payable") ||
+            value.includes("account payable") ||
+            value.includes("payable")
+        );
+
+    }
+
+
+    isSuspense(name) {
+
+        return name
+            .toLowerCase()
+            .includes("suspense");
+
+    }
+
+
+    toNumber(value) {
+
+        if (typeof value === "number")
+            return value;
+
+        if (!value)
+            return 0;
+
+        const number =
+            parseFloat(
+                String(value)
+                    .replace(/,/g, "")
+                    .replace(/[^\d.-]/g, "")
+            );
+
+        return isNaN(number)
+            ? 0
+            : number;
+
+    }
+
+
     render(findings) {
 
-        return findings.map(f => `
+        return findings.map(f => {
 
-<div class="audit-card ${f.severity}">
+            return `
 
-<h3>${f.title}</h3>
+                <div class="audit-card ${f.severity}">
 
-<p>${f.message}</p>
+                    <h3>
+                        ${f.title}
+                    </h3>
 
-</div>
+                    <p>
+                        ${f.message}
+                    </p>
 
-`).join("");
+                    ${
+                        f.recommendation
+                        ? `
+                            <p>
+                                <strong>Review:</strong>
+                                ${f.recommendation}
+                            </p>
+                          `
+                        : ""
+                    }
+
+                </div>
+
+            `;
+
+        }).join("");
 
     }
 
 }
 
-const audit = new AuditEngine();
+
+const audit =
+    new AuditEngine();

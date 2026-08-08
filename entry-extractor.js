@@ -12,9 +12,6 @@ class EntryExtractor {
 
         return {
 
-            document:
-                this.extractDocument(doc),
-
             transactions:
                 this.extractTransactions(doc)
 
@@ -22,79 +19,6 @@ class EntryExtractor {
 
     }
 
-
-    // --------------------------------------------------
-    // Document
-    // --------------------------------------------------
-
-    extractDocument(doc) {
-
-        const result = {
-
-            type: "",
-            number: "",
-            date: "",
-            title: ""
-
-        };
-
-        const heading =
-            doc.querySelector("h1, h2");
-
-        if (heading) {
-
-            const text =
-                heading.textContent.trim();
-
-            result.title = text;
-
-            const match =
-                text.match(/^(.+?)\s+([0-9]+)$/);
-
-            if (match) {
-
-                result.type =
-                    match[1].trim();
-
-                result.number =
-                    match[2];
-
-            }
-
-        }
-
-        const labels =
-            [...doc.querySelectorAll("label")];
-
-        labels.forEach(label => {
-
-            const name =
-                label.textContent
-                    .trim()
-                    .toLowerCase();
-
-            const value =
-                label
-                    .nextElementSibling
-                    ?.textContent
-                    .trim() || "";
-
-            if (name.includes("date")) {
-
-                result.date = value;
-
-            }
-
-        });
-
-        return result;
-
-    }
-
-
-    // --------------------------------------------------
-    // Transactions
-    // --------------------------------------------------
 
     extractTransactions(doc) {
 
@@ -116,56 +40,32 @@ class EntryExtractor {
             const td =
                 [...tr.querySelectorAll("td")];
 
-            /*
-             * Manager transaction table
-             *
-             * 0  Edit
-             * 1  View
-             * 2  Date
-             * 3  Document
-             * 4  Contact
-             * 5  blank
-             * 6  Description
-             * 7  blank
-             * 8  blank
-             * 9  Amount
-             * 10 blank
-             * 11 Balance
-             */
-
-
+            // Manager transaction table has 12 columns.
             if (td.length < 12)
                 return;
 
 
             const date =
-                this.cleanText(td[2]);
-
+                this.clean(td[2]);
 
             const documentText =
-                this.cleanText(td[3]);
-
+                this.clean(td[3]);
 
             const contact =
-                this.cleanText(td[4]);
-
+                this.clean(td[4]);
 
             const description =
-                this.cleanText(td[6]);
-
+                this.clean(td[6]);
 
             const amountText =
-                this.cleanText(td[9]);
-
+                this.clean(td[9]);
 
             const balanceText =
-                this.cleanText(td[11]);
+                this.clean(td[11]);
 
 
             const document =
-                this.parseDocument(
-                    documentText
-                );
+                this.parseDocument(documentText);
 
 
             transactions.push({
@@ -178,35 +78,15 @@ class EntryExtractor {
                 documentNumber:
                     document.number,
 
-                documentDescription:
-                    document.description,
+                description,
 
                 contact,
 
-                description,
-
                 amount:
-                    this.parseAmount(
-                        amountText
-                    ),
+                    this.parseAmount(amountText),
 
                 balance:
-                    this.parseBalance(
-                        balanceText
-                    ),
-
-                raw: {
-
-                    document:
-                        documentText,
-
-                    amount:
-                        amountText,
-
-                    balance:
-                        balanceText
-
-                }
+                    this.parseBalance(balanceText)
 
             });
 
@@ -218,10 +98,6 @@ class EntryExtractor {
     }
 
 
-    // --------------------------------------------------
-    // Document parser
-    // --------------------------------------------------
-
     parseDocument(text) {
 
         if (!text) {
@@ -229,23 +105,12 @@ class EntryExtractor {
             return {
 
                 type: "",
-                number: "",
-                description: ""
+
+                number: ""
 
             };
 
         }
-
-
-        /*
-         * Examples:
-         *
-         * Sales Invoice — 9022163 — 22-04-2024
-         *
-         * Receipt — 2075
-         *
-         * Purchase Invoice — 12548 — 05-05-2019
-         */
 
 
         const parts =
@@ -255,40 +120,18 @@ class EntryExtractor {
                 .filter(Boolean);
 
 
-        if (parts.length === 1) {
-
-            return {
-
-                type: parts[0],
-
-                number: "",
-
-                description: ""
-
-            };
-
-        }
-
-
         return {
 
             type:
                 parts[0] || "",
 
             number:
-                parts[1] || "",
-
-            description:
-                parts.slice(2).join(" — ")
+                parts[1] || ""
 
         };
 
     }
 
-
-    // --------------------------------------------------
-    // Amount
-    // --------------------------------------------------
 
     parseAmount(text) {
 
@@ -296,29 +139,22 @@ class EntryExtractor {
             return 0;
 
 
-        let value =
+        const cleaned =
             text
                 .replace(/,/g, "")
-                .replace(/[^\d.-]/g, "")
-                .trim();
+                .replace(/[^\d.-]/g, "");
 
 
         const number =
-            parseFloat(value);
+            parseFloat(cleaned);
 
 
-        if (isNaN(number))
-            return 0;
-
-
-        return number;
+        return isNaN(number)
+            ? 0
+            : number;
 
     }
 
-
-    // --------------------------------------------------
-    // Balance
-    // --------------------------------------------------
 
     parseBalance(text) {
 
@@ -343,13 +179,10 @@ class EntryExtractor {
                     : "";
 
 
-        const value =
-            this.parseAmount(text);
-
-
         return {
 
-            value,
+            value:
+                this.parseAmount(text),
 
             side
 
@@ -358,11 +191,7 @@ class EntryExtractor {
     }
 
 
-    // --------------------------------------------------
-    // Text cleanup
-    // --------------------------------------------------
-
-    cleanText(element) {
+    clean(element) {
 
         if (!element)
             return "";

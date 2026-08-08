@@ -1,45 +1,75 @@
-const output = document.getElementById("output");
+const output =
+    document.getElementById("output");
+
 
 function extractTransactions(html) {
 
-    const doc = new DOMParser().parseFromString(html, "text/html");
+    const doc =
+        new DOMParser()
+            .parseFromString(
+                html,
+                "text/html"
+            );
 
-    const table = doc.querySelector("table");
+
+    const table =
+        doc.querySelector("table");
+
 
     if (!table)
         return null;
+
 
     return table.outerHTML;
 
 }
 
+
 async function start() {
 
-    output.innerHTML = "<p>Loading Trial Balance...</p>";
+    output.innerHTML =
+        "<p>Loading Trial Balance...</p>";
+
 
     try {
 
-        const report = await reports.getTrialBalanceReport();
+        const report =
+            await reports.getTrialBalanceReport();
+
 
         const response =
-            await manager.getTrialBalanceView(report.item.key);
+            await manager.getTrialBalanceView(
+                report.item.key
+            );
+
 
         if (response.status !== 200)
-            throw new Error("Failed to load Trial Balance View");
+            throw new Error(
+                "Failed to load Trial Balance View"
+            );
 
-        const view = response.body;
+
+        const view =
+            response.body;
+
 
         const flatRows = [];
 
+
         function collectRows(node) {
 
-            if (!node || !Array.isArray(node.items))
+            if (
+                !node ||
+                !Array.isArray(node.items)
+            )
                 return;
+
 
             for (const row of node.items) {
 
                 if (row.cells)
                     flatRows.push(row);
+
 
                 if (row.rows)
                     collectRows(row.rows);
@@ -48,45 +78,73 @@ async function start() {
 
         }
 
+
         collectRows(view.rows);
 
-        const accounts = flatRows.map(row => {
 
-            const cells = row.cells || [];
+        const accounts =
+            flatRows.map(row => {
 
-            return {
+                const cells =
+                    row.cells || [];
 
-                account: row.displayName || "",
 
-                debit: cells[0]?.text || "",
+                return {
 
-                credit: cells[1]?.text || "",
+                    account:
+                        row.displayName || "",
 
-                debitLink: cells[0]?.link?.href || "",
+                    debit:
+                        cells[0]?.text || "",
 
-                creditLink: cells[1]?.link?.href || ""
+                    credit:
+                        cells[1]?.text || "",
 
-            };
+                    debitLink:
+                        cells[0]?.link?.href || "",
 
-        });
+                    creditLink:
+                        cells[1]?.link?.href || ""
+
+                };
+
+            });
+
 
         let html = `
-            <h2>Trial Balance</h2>
+
+            <h2>
+                Trial Balance
+            </h2>
+
 
             <table>
 
                 <thead>
 
                     <tr>
-                        <th>Account</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
+
+                        <th>
+                            Account
+                        </th>
+
+                        <th>
+                            Debit
+                        </th>
+
+                        <th>
+                            Credit
+                        </th>
+
                     </tr>
 
                 </thead>
 
+
                 <tbody>
+
         `;
+
 
         for (const a of accounts) {
 
@@ -94,24 +152,60 @@ async function start() {
 
                 <tr>
 
-                    <td>${a.account}</td>
+                    <td>
+                        ${a.account}
+                    </td>
+
 
                     <td>
 
                         ${
                             a.debitLink
-                            ? `<a href="#" data-link="${a.debitLink}">${a.debit}</a>`
-                            : a.debit
+
+                            ?
+
+                            `
+                            <a
+                                href="#"
+                                data-link="${a.debitLink}"
+                                data-account="${a.account}"
+                                data-debit="${a.debit}"
+                                data-credit="${a.credit}"
+                            >
+                                ${a.debit}
+                            </a>
+                            `
+
+                            :
+
+                            a.debit
                         }
 
                     </td>
+
 
                     <td>
 
                         ${
                             a.creditLink
-                            ? `<a href="#" data-link="${a.creditLink}">${a.credit}</a>`
-                            : a.credit
+
+                            ?
+
+                            `
+                            <a
+                                href="#"
+                                data-link="${a.creditLink}"
+                                data-account="${a.account}"
+                                data-debit="${a.debit}"
+                                data-credit="${a.credit}"
+                            >
+                                ${a.credit}
+                            </a>
+                            `
+
+                            :
+
+                            a.credit
                         }
 
                     </td>
@@ -122,123 +216,259 @@ async function start() {
 
         }
 
+
         html += `
 
                 </tbody>
 
             </table>
 
+
             <hr>
 
-            <h2>Transactions</h2>
+
+            <h2>
+                Transactions
+            </h2>
+
 
             <div id="transactions">
 
-                <p>Select an amount to load transactions.</p>
+                <p>
+                    Select an amount to load transactions.
+                </p>
 
             </div>
 
+
             <hr>
 
-            <h2>Audit Findings</h2>
+
+            <h2>
+                Audit Findings
+            </h2>
+
 
             <div id="analysis">
 
-                Select a transaction.
+                Select an account to audit.
 
             </div>
 
         `;
 
-        output.innerHTML = html;
 
-        output.querySelectorAll("a[data-link]").forEach(link => {
+        output.innerHTML =
+            html;
 
-            link.onclick = async e => {
 
-                e.preventDefault();
+        output
+            .querySelectorAll(
+                "a[data-link]"
+            )
+            .forEach(link => {
 
-                const box =
-                    document.getElementById("transactions");
 
-                const analysis =
-                    document.getElementById("analysis");
+                link.onclick =
+                    async e => {
 
-                box.innerHTML =
-                    "<p>Loading transactions...</p>";
+                        e.preventDefault();
 
-                analysis.innerHTML =
-                    "<p>Analyzing...</p>";
 
-                try {
+                        const box =
+                            document.getElementById(
+                                "transactions"
+                            );
 
-                    const response =
-                        await manager.trialBalanceTransactions(
-                            link.dataset.link
-                        );
 
-                    const entry =
-                        extractor.extract(response.body);
+                        const analysis =
+                            document.getElementById(
+                                "analysis"
+                            );
 
-                    const findings =
-                        audit.analyze(entry);
-
-                    analysis.innerHTML =
-                        audit.render(findings);
-
-                    const table =
-                        extractTransactions(response.body);
-
-                    if (!table) {
 
                         box.innerHTML =
-                            "<p>No transaction table found.</p>";
+                            "<p>Loading transactions...</p>";
 
-                        return;
 
-                    }
+                        analysis.innerHTML =
+                            "<p>Analyzing account...</p>";
 
-                    box.innerHTML = `
 
-${table}
+                        try {
 
-<hr>
 
-<h3>Extracted Entry</h3>
+                            /*
+                             * ---------------------------------
+                             * Account selected from Trial Balance
+                             * ---------------------------------
+                             */
 
-<pre>${JSON.stringify(entry, null, 4)}</pre>
+                            const account = {
 
-`;
+                                name:
+                                    link.dataset.account,
 
-                }
+                                debit:
+                                    link.dataset.debit,
 
-                catch (err) {
+                                credit:
+                                    link.dataset.credit,
 
-                    console.error(err);
+                                transactions: []
 
-                    analysis.innerHTML =
-                        `<p style="color:red">${err.message}</p>`;
+                            };
 
-                    box.innerHTML =
-                        `<p style="color:red">${err.message}</p>`;
 
-                }
+                            /*
+                             * ---------------------------------
+                             * Load transaction history
+                             * ---------------------------------
+                             */
 
-            };
+                            const response =
+                                await manager
+                                    .trialBalanceTransactions(
+                                        link.dataset.link
+                                    );
 
-        });
+
+                            /*
+                             * ---------------------------------
+                             * Extract transactions
+                             * ---------------------------------
+                             */
+
+                            const extracted =
+                                extractor.extract(
+                                    response.body
+                                );
+
+
+                            account.transactions =
+                                extracted.transactions || [];
+
+
+                            /*
+                             * ---------------------------------
+                             * Audit
+                             * ---------------------------------
+                             */
+
+                            const findings =
+                                audit.analyze(
+                                    account
+                                );
+
+
+                            analysis.innerHTML =
+                                audit.render(
+                                    findings
+                                );
+
+
+                            /*
+                             * ---------------------------------
+                             * Display transaction table
+                             * ---------------------------------
+                             */
+
+                            const table =
+                                extractTransactions(
+                                    response.body
+                                );
+
+
+                            if (!table) {
+
+                                box.innerHTML =
+                                    "<p>No transaction table found.</p>";
+
+                                return;
+
+                            }
+
+
+                            box.innerHTML = `
+
+                                ${table}
+
+                                <hr>
+
+                                <h3>
+                                    Account Being Audited
+                                </h3>
+
+                                <pre>${JSON.stringify(
+                                    {
+                                        name:
+                                            account.name,
+
+                                        debit:
+                                            account.debit,
+
+                                        credit:
+                                            account.credit,
+
+                                        transactionCount:
+                                            account.transactions.length
+                                    },
+                                    null,
+                                    4
+                                )}</pre>
+
+                            `;
+
+                        }
+
+
+                        catch (err) {
+
+                            console.error(err);
+
+
+                            analysis.innerHTML = `
+
+                                <p style="color:red">
+
+                                    ${err.message}
+
+                                </p>
+
+                            `;
+
+
+                            box.innerHTML = `
+
+                                <p style="color:red">
+
+                                    ${err.message}
+
+                                </p>
+
+                            `;
+
+                        }
+
+                    };
+
+            });
 
     }
+
 
     catch (e) {
 
         console.error(e);
 
+
         output.textContent =
-            e.stack || e.message;
+            e.stack ||
+            e.message;
 
     }
 
 }
+
 
 start();
