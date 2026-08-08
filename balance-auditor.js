@@ -1,0 +1,398 @@
+// balance-auditor.js
+// Account-level audit rules. Receives normalized account + transaction data.
+
+class BalanceAuditor {
+
+    analyze(account) {
+        const findings = [];
+
+        if (!account) {
+            return findings;
+        }
+
+        const transactions = Array.isArray(account.transactions)
+            ? account.transactions.filter(Boolean)
+            : [];
+
+        const balance = this.balance(account);
+
+        this.checkSuspenseOrClearing(account, balance, findings);
+        this.checkReceivableCredit(account, balance, findings);
+        this.checkPayableDebit(account, balance, findings);
+        this.checkOldBalance(account, balance, transactions, findings);
+        this.checkInactiveAccount(account, balance, transactions, findings);
+        this.checkDuplicateTransactions(transactions, findings);
+        this.checkRepeatedAmounts(transactions, findings);
+        this.checkTinyTransactions(transactions, findings);
+        this.checkUnexpectedDocumentTypes(account, transactions, findings);
+        this.checkFixedAssetActivity(account, transactions, findings);
+        this.checkCapitalActivity(account, transactions, findings);
+        this.checkAbnormalMovement(account, balance, transactions, findings);
+
+        return findings;
+    }
+
+    balance(account) {
+        const debit = this.number(account.debit);
+        const credit = this.number(account.credit);
+        return debit - credit;
+    }
+
+    number(value) {
+        if (value === null || value === undefined || value === "") return 0;
+        const n = Number(String(value).replace(/,/g, "").replace(/[^\d.-]/g, ""));
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    amount(transaction) {
+        if (!transaction) return 0;
+        return Math.abs(this.number(
+            transaction.amount?.value !== undefined
+                ? transaction.amount.value
+                : transaction.amount
+        ));
+    }
+
+    date(transaction) {
+        const value = transaction?.date;
+        if (!value) return 0;
+
+        const text = String(value).trim();
+        const match = text.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        if (match) {
+            return new Date(
+                Number(match[3]),
+                Number(match[2]) - 1,
+                Number(match[1])
+            ).getTime();
+        }
+
+        const parsed = Date.parse(text);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    finding(severity, code, title, description, recommendation, confidence, evidence = []) {
+        return {
+            severity,
+            code,
+            title,
+            description,
+            recommendation,
+            confidence,
+            evidence
+        };
+    }
+
+    checkSuspenseOrClearing(account, balance, findings) {
+        const name = this.name(account);
+        if (!/(suspense|clearing)/i.test(name)) return;
+        if (Math.abs(balance) < 0.01) return;
+
+        findings.push(this.finding(
+            "high",
+            "SUSPENSE_OR_CLEARING_BALANCE",
+            `${name} has a remaining balance`,
+            `The ${name} account has a non-zero balance of ${this.money(balance)}. Suspense and clearing accounts normally require the underlying item to be identified and cleared.`,
+            "Review the outstanding transactions and identify the original accounting item before leaving the balance unresolved.",
+            0.98,
+            [{ account: name, balance }]
+        ));
+    }
+
+    checkReceivableCredit(account, balance, findings) {
+        if (!/(receivable|accounts receivable|trade receivable|customer)/i.test(this.name(account))) return;
+        if (balance >= -0.01) return;
+
+        findings.push(this.finding(
+            "high",
+            "RECEIVABLE_CREDIT_BALANCE",
+            "Receivable has a credit balance",
+            `The account has a credit balance of ${this.money(balance)}. A credit balance in receivables may indicate an overpayment, credit note, advance, or posting to the wrong account.`,
+            "Review the customers and the transactions producing the credit balance. Confirm whether it is a genuine customer advance/overpayment or a posting error.",
+            0.93,
+            [{ account: this.name(account), balance }]
+        ));
+    }
+
+    checkPayableDebit(account, balance, findings) {
+        if (!/(payable|accounts payable|trade payable|supplier|vendor)/i.test(this.name(account))) return;
+        if (balance <= 0.01) return;
+
+        findings.push(this.finding(
+            "high",
+            "PAYABLE_DEBIT_BALANCE",
+            "Payable has a debit balance",
+            `The account has a debit balance of ${this.money(balance)}. A debit balance in payables may indicate an advance payment, supplier overpayment, or incorrect posting.`,
+            "Review the supplier balances and the transactions producing the debit balance. Confirm whether the amount represents a genuine advance or a posting error.",
+            0.93,
+            [{ account: this.name(account), balance }]
+        ));
+    }
+
+    checkOldBalance(account, balance, transactions, findings) {
+        if (Math.abs(balance) < 0.01 || transactions.length === 0) return;
+
+        const dates = transactions.map(t => this.date(t)).filter(Boolean);
+        if (!dates.length) return;
+
+        const latest = Math.max(...dates);
+        const ageDays = Math.floor((Date.now() - latest) / 86400000);
+        if (ageDays < 365) return;
+
+        findings.push(this.finding(
+            "medium",
+            "VERY_OLD_BALANCE",
+            "Balance appears very old",
+            `The account still carries ${this.money(balance)}, while the latest available transaction is approximately ${ageDays} days old.`,
+            "Review the outstanding balance and determine whether it should be settled, reclassified, impaired, or cleared.",
+            0.88,
+            [{ account: this.name(account), balance, ageDays }]
+        ));
+    }
+
+    checkInactiveAccount(account, balance, transactions, findings) {
+        if (Math.abs(balance) < 0.01 || transactions.length === 0) return;
+
+        const dates = transactions.map(t => this.date(t)).filter(Boolean);
+        if (!dates.length) return;
+
+        const latest = Math.max(...dates);
+        const ageDays = Math.floor((Date.now() - latest) / 86400000);
+        if (ageDays < 180 || ageDays >= 365) return;
+
+        findings.push(this.finding(
+            "low",
+            "INACTIVE_BALANCE_SHEET_ACCOUNT",
+            "Account has been inactive for an extended period",
+            `The account has a non-zero balance of ${this.money(balance)} and no transaction has been recorded for approximately ${ageDays} days.`,
+            "Confirm that the balance is still valid and that the account has not become obsolete or incorrectly classified.",
+            0.79,
+            [{ account: this.name(account), balance, ageDays }]
+        ));
+    }
+
+    checkDuplicateTransactions(transactions, findings) {
+        if (transactions.length < 2) return;
+
+        const groups = new Map();
+        for (const t of transactions) {
+            const key = [
+                String(t.date || "").trim(),
+                String(t.documentType || "").trim().toLowerCase(),
+                String(t.documentNumber || "").trim().toLowerCase(),
+                this.amount(t).toFixed(2),
+                String(t.description || "").trim().toLowerCase()
+            ].join("|");
+
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(t);
+        }
+
+        for (const [key, group] of groups) {
+            if (group.length < 2) continue;
+
+            const hasDocumentNumber = group.some(t => String(t.documentNumber || "").trim() !== "");
+            findings.push(this.finding(
+                hasDocumentNumber ? "high" : "medium",
+                "DUPLICATE_TRANSACTIONS",
+                "Potential duplicate transactions detected",
+                `${group.length} transactions have the same date, amount, description and document details.`,
+                "Open the matching transactions and confirm that each posting represents a separate accounting event.",
+                hasDocumentNumber ? 0.91 : 0.76,
+                group.slice(0, 5)
+            ));
+        }
+    }
+
+    checkRepeatedAmounts(transactions, findings) {
+        if (transactions.length < 5) return;
+
+        const groups = new Map();
+        for (const t of transactions) {
+            const amount = this.amount(t);
+            if (amount <= 0) continue;
+            const key = amount.toFixed(2);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(t);
+        }
+
+        const repeated = [...groups.entries()]
+            .filter(([, group]) => group.length >= 3)
+            .sort((a, b) => b[1].length - a[1].length)
+            .slice(0, 3);
+
+        for (const [amount, group] of repeated) {
+            findings.push(this.finding(
+                "low",
+                "REPEATED_UNUSUAL_AMOUNT",
+                "Repeated transaction amount",
+                `The amount ${this.money(Number(amount))} appears ${group.length} times in this account. Repeated identical amounts can be legitimate, but the pattern deserves review when it is unexpected for the account.`,
+                "Confirm that the repeated amount represents genuine recurring transactions and is not caused by duplicate or template-based postings.",
+                0.68,
+                group.slice(0, 5)
+            ));
+        }
+    }
+
+    checkTinyTransactions(transactions, findings) {
+        if (transactions.length < 10) return;
+
+        const amounts = transactions.map(t => this.amount(t)).filter(a => a > 0);
+        if (!amounts.length) return;
+
+        const max = Math.max(...amounts);
+        if (max <= 0) return;
+
+        const tiny = transactions.filter(t => {
+            const amount = this.amount(t);
+            return amount > 0 && amount <= max * 0.01;
+        });
+
+        if (tiny.length < 10 || tiny.length / transactions.length < 0.5) return;
+
+        findings.push(this.finding(
+            "low",
+            "LARGE_NUMBER_OF_TINY_TRANSACTIONS",
+            "Large number of relatively small transactions",
+            `${tiny.length} of ${transactions.length} transactions are at or below 1% of the largest transaction amount in this account.`,
+            "Review whether these entries are expected operational activity or whether they indicate excessive fragmentation or posting noise.",
+            0.66,
+            tiny.slice(0, 5)
+        ));
+    }
+
+    checkUnexpectedDocumentTypes(account, transactions, findings) {
+        if (transactions.length < 3) return;
+
+        const category = this.category(this.name(account));
+        const expected = {
+            cash: /receipt|payment|transfer|journal/i,
+            bank: /receipt|payment|transfer|journal|deposit|withdrawal/i,
+            receivable: /sales invoice|receipt|credit note|journal|payment/i,
+            payable: /purchase invoice|payment|debit note|journal|receipt/i,
+            inventory: /sales invoice|purchase invoice|credit note|debit note|inventory|journal/i,
+            fixedAsset: /purchase invoice|payment|receipt|journal|asset|disposal/i,
+            capital: /capital|journal|receipt|payment|transfer/i
+        }[category];
+
+        if (!expected) return;
+
+        const unexpected = transactions.filter(t => {
+            const type = String(t.documentType || "").trim();
+            return type && !expected.test(type);
+        });
+
+        if (!unexpected.length) return;
+
+        const ratio = unexpected.length / transactions.length;
+        if (ratio < 0.34 && unexpected.length < 3) return;
+
+        findings.push(this.finding(
+            "medium",
+            "UNEXPECTED_DOCUMENT_TYPES",
+            "Unexpected document type activity",
+            `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account.`,
+            "Review the highlighted entries and confirm that the document type and account classification are appropriate. This is a review signal, not proof of an error.",
+            0.71,
+            unexpected.slice(0, 8)
+        ));
+    }
+
+    checkFixedAssetActivity(account, transactions, findings) {
+        if (!/fixed asset|property|plant|equipment|vehicle|furniture/i.test(this.name(account))) return;
+        if (transactions.length < 5) return;
+
+        if (transactions.length < 5) return;
+
+        findings.push(this.finding(
+            "medium",
+            "FIXED_ASSET_OPERATIONAL_ACTIVITY",
+            "Fixed asset account has frequent postings",
+            `The fixed-asset-type account contains ${transactions.length} transactions in the loaded history. Frequent operational postings may indicate that operating expenses are being posted directly to the asset account.`,
+            "Review the transaction descriptions and document types. Confirm that only capitalizable costs and valid asset movements are posted here.",
+            0.73,
+            transactions.slice(-8)
+        ));
+    }
+
+    checkCapitalActivity(account, transactions, findings) {
+        if (!/capital|share capital|owner.?s equity|equity contribution/i.test(this.name(account))) return;
+        if (transactions.length < 4) return;
+
+        findings.push(this.finding(
+            "medium",
+            "FREQUENT_CAPITAL_MOVEMENT",
+            "Capital account changes frequently",
+            `The capital/equity account contains ${transactions.length} transactions in the loaded history. Frequent changes may require confirmation of the underlying owner or shareholder transactions.`,
+            "Review the capital entries and supporting documents to confirm that each movement represents a genuine contribution, withdrawal, distribution, or approved equity transaction.",
+            0.72,
+            transactions.slice(-8)
+        ));
+    }
+
+    checkAbnormalMovement(account, balance, transactions, findings) {
+        if (transactions.length < 6) return;
+
+        const balances = transactions
+            .map(t => this.signedBalance(t.balance))
+            .filter(v => Number.isFinite(v));
+
+        if (balances.length < 6) return;
+
+        let directionChanges = 0;
+        for (let i = 1; i < balances.length; i++) {
+            const previous = balances[i - 1];
+            const current = balances[i];
+            if (previous === 0 || current === 0) continue;
+            if ((previous > 0 && current < 0) || (previous < 0 && current > 0)) {
+                directionChanges++;
+            }
+        }
+
+        if (directionChanges < 3) return;
+
+        findings.push(this.finding(
+            "low",
+            "ABNORMAL_MOVEMENT_PATTERN",
+            "Abnormal balance movement pattern",
+            `The running balance changes debit/credit direction ${directionChanges} times in the loaded transaction history.`,
+            "Review the transactions around the direction changes and confirm that the account is being used consistently.",
+            0.67,
+            transactions.slice(-10)
+        ));
+    }
+
+    category(name) {
+        if (/receivable|customer/i.test(name)) return "receivable";
+        if (/payable|supplier|vendor/i.test(name)) return "payable";
+        if (/inventory|stock/i.test(name)) return "inventory";
+        if (/fixed asset|property|plant|equipment|vehicle|furniture/i.test(name)) return "fixedAsset";
+        if (/capital|equity contribution|owner.?s equity/i.test(name)) return "capital";
+        if (/bank/i.test(name)) return "bank";
+        if (/cash/i.test(name)) return "cash";
+        return "other";
+    }
+
+    name(account) {
+        return String(account?.name || "").trim();
+    }
+
+    signedBalance(balance) {
+        if (balance && typeof balance === "object") {
+            const value = this.number(balance.value);
+            const side = String(balance.side || "").toLowerCase();
+            if (side === "credit") return -Math.abs(value);
+            return Math.abs(value);
+        }
+        return this.number(balance);
+    }
+
+    money(value) {
+        return Number(value).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+}
+
+const balanceAuditor = new BalanceAuditor();

@@ -10,41 +10,34 @@ class EntryExtractor {
                 "text/html"
             );
 
-        const accountDetailBalance =
-            this.extractAccountDetailBalance(doc);
-
         const table =
             this.findTransactionTable(doc);
 
         if (!table) {
-            return {
-                transactions: [],
-                finalBalance: null,
-                accountDetailBalance,
-                hasTransactionLedger: false,
-                hasAccountDetailBalance:
-                    accountDetailBalance !== null
-            };
-        }
+    return {
+        transactions: [],
+        finalBalance: {
+            value: 0,
+            side: ""
+        },
+        hasTransactionLedger: false
+    };
+}
 
         const transactions =
             this.extractTransactions(
                 table
             );
 
-        // A Manager account-detail page can contain a table that is not
-        // the transaction ledger. If no real transaction rows were
-        // extracted, use the account-detail total instead.
-        if (!transactions.length) {
-            return {
-                transactions: [],
-                finalBalance: null,
-                accountDetailBalance,
-                hasTransactionLedger: false,
-                hasAccountDetailBalance:
-                    accountDetailBalance !== null
-            };
-        }
+
+        /*
+         * IMPORTANT:
+         *
+         * The Manager total/balance bar may be
+         * outside the transaction table.
+         *
+         * Therefore we pass the complete document.
+         */
 
         const finalBalance =
             this.extractFinalBalance(
@@ -52,159 +45,12 @@ class EntryExtractor {
                 table
             );
 
-        return {
-            transactions,
-            finalBalance,
-            accountDetailBalance: null,
-            hasTransactionLedger: true,
-            hasAccountDetailBalance: false
-        };
-    }
 
-
-    // ==================================================
-    // EXTRACT ACCOUNT DETAIL BALANCE
-    // ==================================================
-    // Some Manager account pages do not contain a transaction
-    // ledger. Instead they show account-detail rows followed by
-    // a total/balance bar. We use that total only when there is
-    // no transaction ledger at all.
-    extractAccountDetailBalance(doc) {
-
-        const candidates = [];
-
-        const moneyPattern =
-            /(?:AED|SAR|USD|EUR|GBP|\$|€|£)\s*-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?/gi;
-
-        const elements = [
-            ...doc.querySelectorAll("*")
-        ];
-
-        for (const element of elements) {
-
-            const text = this.clean(element);
-
-            if (!text || !moneyPattern.test(text)) {
-                moneyPattern.lastIndex = 0;
-                continue;
-            }
-            moneyPattern.lastIndex = 0;
-
-            const matches = text.match(moneyPattern) || [];
-
-            // A leaf/near-leaf element containing one amount is the most
-            // reliable representation of the blue Manager total cells.
-            if (matches.length === 1) {
-                const amountText = matches[0];
-                const value = this.parseAmount(amountText);
-
-                if (!Number.isFinite(value))
-                    continue;
-
-                let score = 0;
-                let parent = element;
-
-                for (let level = 0; level < 6 && parent; level++) {
-                    const cls = String(parent.className || "").toLowerCase();
-                    const style = String(parent.getAttribute?.("style") || "").toLowerCase();
-                    const id = String(parent.id || "").toLowerCase();
-                    const marker = `${cls} ${style} ${id}`;
-
-                    if (/total|balance|summary|footer|grand|amount/.test(marker))
-                        score += 100;
-
-                    if (/blue|rgb\(0,\s*102,\s*204\)|#0066cc|#0070c0|#06c/.test(marker))
-                        score += 120;
-
-                    if (parent.tagName === "TFOOT")
-                        score += 150;
-
-                    const parentText = this.clean(parent);
-                    const parentMoneyCount =
-                        (parentText.match(moneyPattern) || []).length;
-                    moneyPattern.lastIndex = 0;
-
-                    if (parentMoneyCount >= 3)
-                        score += 80;
-                    else if (parentMoneyCount >= 2)
-                        score += 40;
-
-                    parent = parent.parentElement;
-                }
-
-                if (/\bAED\b/i.test(amountText))
-                    score += 30;
-
-                if (/\bDr\b/i.test(amountText))
-                    score += 10;
-
-                // Manager may render the amount and the Dr/Cr suffix
-                // in separate DOM nodes (e.g. "AED 1,138,957.16" and
-                // "Cr").  If the amount itself has no suffix, inspect
-                // its nearby ancestors before defaulting to an unknown
-                // side.  This is essential for credit account totals.
-                let side = /\bCr\b/i.test(amountText)
-                    ? "credit"
-                    : /\bDr\b/i.test(amountText)
-                        ? "debit"
-                        : "";
-
-                if (!side) {
-                    let context = element;
-
-                    for (let level = 0; level < 6 && context; level++) {
-                        const contextText = this.clean(context);
-
-                        // Prefer an explicit suffix near the exact amount.
-                        if (/\bCr\b/i.test(contextText)) {
-                            side = "credit";
-                            break;
-                        }
-
-                        if (/\bDr\b/i.test(contextText)) {
-                            side = "debit";
-                            break;
-                        }
-
-                        context = context.parentElement;
-                    }
-                }
-
-                candidates.push({
-                    value,
-                    score,
-                    currency: /\bAED\b/i.test(amountText)
-                        ? "AED"
-                        : /\bSAR\b/i.test(amountText)
-                            ? "SAR"
-                            : /\bUSD\b|\$/i.test(amountText)
-                                ? "USD"
-                                : "",
-                    side
-                });
-            }
-        }
-
-        if (!candidates.length)
-            return null;
-
-        // Prefer the main AED total. Among AED totals, the strongest
-        // total/footer candidate wins; this avoids choosing a customer
-        // row amount such as AED 11,950.00.
-        candidates.sort((a, b) => {
-            const aCurrency = a.currency === "AED" ? 1 : 0;
-            const bCurrency = b.currency === "AED" ? 1 : 0;
-
-            if (bCurrency !== aCurrency)
-                return bCurrency - aCurrency;
-
-            if (b.score !== a.score)
-                return b.score - a.score;
-
-            return b.value - a.value;
-        });
-
-        return candidates[0];
+      return {
+    transactions,
+    finalBalance,
+    hasTransactionLedger: true
+};
     }
 
 
@@ -240,21 +86,12 @@ class EntryExtractor {
                     tr => {
 
                         const td =
-                            [...tr.querySelectorAll("td")];
+                            tr.querySelectorAll(
+                                "td"
+                            );
 
-                        if (td.length < 12)
-                            return false;
 
-                        const date = this.clean(td[2]);
-                        const documentText = this.clean(td[3]);
-
-                        const looksLikeDate =
-                            /^(?:\d{1,2}[-\/]\d{1,2}[-\/]\d{4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})$/.test(date);
-
-                        const looksLikeDocument =
-                            /sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|transfer|opening balance/i.test(documentText);
-
-                        return looksLikeDate && looksLikeDocument;
+                        return td.length >= 12;
 
                     }
                 );
@@ -650,13 +487,7 @@ class EntryExtractor {
          * Nothing found.
          */
 
-        return {
-
-            value: 0,
-
-            side: ""
-
-        };
+        return null;
     }
 
 
@@ -1089,4 +920,5 @@ class EntryExtractor {
 // GLOBAL EXTRACTOR INSTANCE
 // ======================================================
 
-window.extractor = new EntryExtractor();
+const extractor =
+    new EntryExtractor();

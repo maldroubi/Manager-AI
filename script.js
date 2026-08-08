@@ -200,83 +200,102 @@ function getLatestTransaction(
 function checkBalance(
     account,
     finalBalance,
-    hasTransactionLedger,
-    accountDetailBalance,
-    hasAccountDetailBalance
+    hasTransactionLedger
 ) {
 
     const balanceSheetBalance =
         getBalanceSheetBalance(account);
 
+
+    // -----------------------------------------
+    // No transaction ledger available
+    // -----------------------------------------
+
     if (!hasTransactionLedger) {
 
-        if (
-            hasAccountDetailBalance &&
-            accountDetailBalance &&
-            Number.isFinite(Number(accountDetailBalance.value))
-        ) {
-            const comparedBalance =
-                Number(accountDetailBalance.value) *
-                (String(accountDetailBalance.side || '').toLowerCase() === 'credit' ? -1 : 1);
-
-            const difference = balanceSheetBalance - comparedBalance;
-
-            return {
-                available: true,
-                balanceSheetBalance,
-                transactionBalance: comparedBalance,
-                comparedBalance,
-                balanceSource: "account-detail",
-                difference,
-                matches: Math.abs(difference) < 0.01,
-                transaction: null
-            };
-        }
-
         return {
+
             available: false,
+
             balanceSheetBalance,
+
             transactionBalance: null,
-            comparedBalance: null,
-            balanceSource: "none",
+
             difference: null,
+
             matches: null,
+
             transaction: null,
-            reason: "No transaction ledger or account-detail balance was available for comparison."
+
+            reason:
+                "Transaction ledger is not available on this page."
+
         };
     }
 
-    if (!finalBalance || finalBalance.value === undefined) {
+
+    // -----------------------------------------
+    // Ledger exists but final balance
+    // could not be extracted
+    // -----------------------------------------
+
+    if (
+        !finalBalance ||
+        finalBalance.value === undefined
+    ) {
+
         return {
+
             available: false,
+
             balanceSheetBalance,
+
             transactionBalance: null,
-            comparedBalance: null,
-            balanceSource: "transaction-ledger",
+
             difference: null,
+
             matches: null,
+
             transaction: null,
-            reason: "Transaction ledger found, but final balance could not be extracted."
+
+            reason:
+                "Transaction ledger found, but final balance could not be extracted."
+
         };
     }
+
+
+    // -----------------------------------------
+    // Normal comparison
+    // -----------------------------------------
 
     const transactionBalance =
-        (Number(finalBalance.value) || 0) *
-        (String(finalBalance.side || '').toLowerCase() === 'credit' ? -1 : 1);
+        Number(finalBalance.value) || 0;
 
-    const difference = balanceSheetBalance - transactionBalance;
+
+    const difference =
+        balanceSheetBalance -
+        transactionBalance;
+
 
     return {
+
         available: true,
+
         balanceSheetBalance,
+
         transactionBalance,
-        comparedBalance: transactionBalance,
-        balanceSource: "transaction-ledger",
+
         difference,
-        matches: Math.abs(difference) < 0.01,
+
+        matches:
+            Math.abs(difference) < 0.01,
+
         transaction: null
+
     };
 }
+
 
 /*
  * Format amount for display.
@@ -367,11 +386,7 @@ function renderBalanceCheck(check) {
                 <p>
 
                     <strong>
-                        ${
-                            check.balanceSource === "account-detail"
-                                ? "Account Detail Balance:"
-                                : "Latest Transaction Balance:"
-                        }
+                        Latest Transaction Balance:
                     </strong>
 
                     ${formatMoney(
@@ -395,13 +410,12 @@ function renderBalanceCheck(check) {
                 <p>
 
                     <strong>
-                        Source:
+                        Latest Transaction:
                     </strong>
 
                     ${
-                        check.balanceSource === "account-detail"
-                            ? "Account Detail"
-                            : (check.transaction?.date || "-")
+                        check.transaction?.date ||
+                        "-"
                     }
 
                 </p>
@@ -444,11 +458,7 @@ function renderBalanceCheck(check) {
             <p>
 
                 <strong>
-                    ${
-                        check.balanceSource === "account-detail"
-                            ? "Account Detail Balance:"
-                            : "Latest Transaction Balance:"
-                    }
+                    Latest Transaction Balance:
                 </strong>
 
                 ${formatMoney(
@@ -474,13 +484,12 @@ function renderBalanceCheck(check) {
             <p>
 
                 <strong>
-                    Source:
+                    Latest Transaction:
                 </strong>
 
                 ${
-                    check.balanceSource === "account-detail"
-                        ? "Account Detail"
-                        : (check.transaction?.date || "-")
+                    check.transaction?.date ||
+                    "-"
                 }
 
             </p>
@@ -916,12 +925,10 @@ async function start() {
 
 const balanceCheck =
     checkBalance(
-    account,
-    extracted.finalBalance,
-    extracted.hasTransactionLedger,
-    extracted.accountDetailBalance,
-    extracted.hasAccountDetailBalance
-);
+        account,
+        extracted.finalBalance,
+        extracted.hasTransactionLedger
+    );
 
 
                                 /*
@@ -957,13 +964,9 @@ const balanceCheck =
                                                     .balanceSheetBalance,
 
 
-                                            balanceSource:
+                                            latestTransactionBalance:
                                                 balanceCheck
-                                                    .balanceSource || "none",
-
-                                            comparedBalance:
-                                                balanceCheck
-                                                    .comparedBalance,
+                                                    .transactionBalance,
 
 
                                             difference:
