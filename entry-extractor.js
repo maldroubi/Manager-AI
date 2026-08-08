@@ -926,5 +926,5 @@ class EntryExtractor {
 // GLOBAL EXTRACTOR INSTANCE
 // ======================================================
 
-const extractor =
+window.extractor =
     new EntryExtractor();
