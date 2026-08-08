@@ -925,10 +925,12 @@ async function start() {
 
 const balanceCheck =
     checkBalance(
-        account,
-        extracted.finalBalance,
-        extracted.hasTransactionLedger
-    );
+    account,
+    extracted.finalBalance,
+    extracted.hasTransactionLedger,
+    extracted.accountDetailBalance,
+    extracted.hasAccountDetailBalance
+);
 
 
                                 /*
@@ -964,7 +966,11 @@ const balanceCheck =
                                                     .balanceSheetBalance,
 
 
-                                            latestTransactionBalance:
+                                            balanceSource:
+                                                balanceCheck
+                                                    .source || "none",
+
+                                            comparedBalance:
                                                 balanceCheck
                                                     .transactionBalance,
 

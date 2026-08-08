@@ -12,17 +12,19 @@ class EntryExtractor {
 
         const table =
             this.findTransactionTable(doc);
-
         if (!table) {
-    return {
-        transactions: [],
-        finalBalance: {
-            value: 0,
-            side: ""
-        },
-        hasTransactionLedger: false
-    };
-}
+            const accountDetailBalance =
+                this.extractAccountDetailBalance(doc);
+
+            return {
+                transactions: [],
+                finalBalance: null,
+                accountDetailBalance,
+                hasTransactionLedger: false,
+                hasAccountDetailBalance:
+                    accountDetailBalance !== null
+            };
+        }
 
         const transactions =
             this.extractTransactions(
@@ -44,13 +46,99 @@ class EntryExtractor {
                 doc,
                 table
             );
+        return {
+            transactions,
+            finalBalance,
+            accountDetailBalance: null,
+            hasTransactionLedger: true,
+            hasAccountDetailBalance: false
+        };
+    }
 
 
-      return {
-    transactions,
-    finalBalance,
-    hasTransactionLedger: true
-};
+    // ==================================================
+    // EXTRACT ACCOUNT DETAIL BALANCE
+    // ==================================================
+    // Some Manager account pages do not contain a transaction
+    // ledger. Instead they show account-detail rows followed by
+    // a total/balance bar. We use that total only when there is
+    // no transaction ledger at all.
+    extractAccountDetailBalance(doc) {
+        const elements = [
+            ...doc.querySelectorAll("*")
+        ];
+
+        const candidates = [];
+
+        for (const element of elements) {
+            // Account-detail totals may themselves be inside a table.
+            // Only ignore ordinary detail rows, not table footers/totals.
+            if (element.closest("tbody tr")) {
+                continue;
+            }
+
+            const text = this.clean(element);
+
+            if (!this.isPureMoneyText(text)) {
+                continue;
+            }
+
+            const value = this.parseAmount(text);
+
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+
+            let score = 0;
+            let parent = element.parentElement;
+
+            for (let level = 0; level < 5 && parent; level++) {
+                const marker =
+                    `${parent.id || ""} ${parent.className || ""}`
+                        .toLowerCase();
+
+                if (/total|balance|summary|footer|grand|amount/.test(marker)) {
+                    score += 100;
+                }
+
+                const moneyChildren =
+                    [...parent.querySelectorAll("*")]
+                        .filter(child =>
+                            this.isPureMoneyText(
+                                this.clean(child)
+                            )
+                        );
+
+                if (moneyChildren.length >= 2) {
+                    score += 50;
+                }
+
+                parent = parent.parentElement;
+            }
+
+            candidates.push({
+                value,
+                side: /\bCr\b/i.test(text)
+                    ? "credit"
+                    : /\bDr\b/i.test(text)
+                        ? "debit"
+                        : "",
+                score
+            });
+        }
+
+        if (!candidates.length) {
+            return null;
+        }
+
+        candidates.sort((a, b) => {
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+            return b.value - a.value;
+        });
+
+        return candidates[0];
     }
 
 
@@ -926,5 +1014,4 @@ class EntryExtractor {
 // GLOBAL EXTRACTOR INSTANCE
 // ======================================================
 
-window.extractor =
-    new EntryExtractor();
+window.extractor = new EntryExtractor();
