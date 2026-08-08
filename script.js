@@ -1,8 +1,20 @@
 const output = document.getElementById("output");
 
+
+/*
+ * Extract the original transaction table
+ * only for display.
+ */
 function extractTransactions(html) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const table = doc.querySelector("table");
+
+    const doc =
+        new DOMParser().parseFromString(
+            html,
+            "text/html"
+        );
+
+    const table =
+        doc.querySelector("table");
 
     if (!table)
         return null;
@@ -10,34 +22,445 @@ function extractTransactions(html) {
     return table.outerHTML;
 }
 
+
+/*
+ * Convert money text into a number.
+ *
+ * Examples:
+ * "25,000.00"
+ * "AED 25,000.00"
+ * "$ 25,000.00"
+ * "25,000.00 Dr"
+ * "25,000.00 Cr"
+ */
+function parseMoney(value) {
+
+    if (value === null || value === undefined)
+        return 0;
+
+    const text =
+        String(value)
+            .replace(/,/g, "")
+            .replace(/[^\d.\-]/g, "");
+
+    const number =
+        parseFloat(text);
+
+    if (Number.isNaN(number))
+        return 0;
+
+    return number;
+}
+
+
+/*
+ * Detect whether a balance is Dr or Cr.
+ */
+function getBalanceSign(value) {
+
+    if (value === null || value === undefined)
+        return 1;
+
+    const text =
+        String(value).toLowerCase();
+
+    if (text.includes("cr"))
+        return -1;
+
+    return 1;
+}
+
+
+/*
+ * Convert a balance text such as:
+ *
+ * 25,000.00 Dr
+ * 25,000.00 Cr
+ *
+ * into a signed number.
+ */
+function parseSignedBalance(value) {
+
+    const amount =
+        parseMoney(value);
+
+    const sign =
+        getBalanceSign(value);
+
+    return amount * sign;
+}
+
+
+/*
+ * Get Balance Sheet balance.
+ *
+ * Debit = positive
+ * Credit = negative
+ */
+function getBalanceSheetBalance(account) {
+
+    const debit =
+        parseMoney(account.debit);
+
+    const credit =
+        parseMoney(account.credit);
+
+    return debit - credit;
+}
+
+
+/*
+ * Convert different possible date formats
+ * into a comparable timestamp.
+ *
+ * Manager normally uses DD-MM-YYYY.
+ */
+function parseTransactionDate(value) {
+
+    if (!value)
+        return 0;
+
+    const text =
+        String(value).trim();
+
+    const match =
+        text.match(
+            /^(\d{1,2})-(\d{1,2})-(\d{4})$/
+        );
+
+    if (match) {
+
+        const day =
+            Number(match[1]);
+
+        const month =
+            Number(match[2]) - 1;
+
+        const year =
+            Number(match[3]);
+
+        return new Date(
+            year,
+            month,
+            day
+        ).getTime();
+    }
+
+    const timestamp =
+        Date.parse(text);
+
+    if (Number.isNaN(timestamp))
+        return 0;
+
+    return timestamp;
+}
+
+
+/*
+ * Find the most recent transaction.
+ *
+ * We do NOT simply use transactions[transactions.length - 1]
+ * because Manager can display transactions newest first.
+ */
+function getLatestTransaction(transactions) {
+
+    if (!Array.isArray(transactions))
+        return null;
+
+    if (transactions.length === 0)
+        return null;
+
+    let latest =
+        transactions[0];
+
+    let latestTime =
+        parseTransactionDate(
+            latest.date
+        );
+
+    for (const transaction of transactions) {
+
+        const time =
+            parseTransactionDate(
+                transaction.date
+            );
+
+        if (time > latestTime) {
+
+            latest =
+                transaction;
+
+            latestTime =
+                time;
+        }
+    }
+
+    return latest;
+}
+
+
+/*
+ * Compare Balance Sheet balance
+ * against the latest transaction balance.
+ */
+function checkBalance(account) {
+
+    const balanceSheetBalance =
+        getBalanceSheetBalance(
+            account
+        );
+
+    const latestTransaction =
+        getLatestTransaction(
+            account.transactions
+        );
+
+
+    if (!latestTransaction) {
+
+        return {
+
+            available: false,
+
+            balanceSheetBalance,
+
+            transactionBalance: null,
+
+            difference: null,
+
+            matches: null,
+
+            transaction: null
+
+        };
+    }
+
+
+    const transactionBalance =
+        parseSignedBalance(
+            latestTransaction.balance
+        );
+
+
+    const difference =
+        balanceSheetBalance -
+        transactionBalance;
+
+
+    const matches =
+        Math.abs(difference) < 0.01;
+
+
+    return {
+
+        available: true,
+
+        balanceSheetBalance,
+
+        transactionBalance,
+
+        difference,
+
+        matches,
+
+        transaction:
+            latestTransaction
+
+    };
+}
+
+
+/*
+ * Format money for display.
+ */
+function formatMoney(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    )
+        return "-";
+
+    return Number(value)
+        .toLocaleString(
+            "en-US",
+            {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }
+        );
+}
+
+
+/*
+ * Render the Balance Check.
+ */
+function renderBalanceCheck(check) {
+
+    if (!check.available) {
+
+        return `
+
+            <div style="
+                padding:16px;
+                border:1px solid #ddd;
+                border-radius:6px;
+            ">
+
+                <h3>
+                    Balance Check
+                </h3>
+
+                <p>
+                    No transaction balance was available
+                    for comparison.
+                </p>
+
+            </div>
+
+        `;
+    }
+
+
+    if (check.matches) {
+
+        return `
+
+            <div style="
+                padding:16px;
+                border:1px solid #c8e6c9;
+                border-radius:6px;
+            ">
+
+                <h3 style="color:#2e7d32;">
+                    ✓ Balance Matches
+                </h3>
+
+                <p>
+                    <strong>
+                        Balance Sheet:
+                    </strong>
+
+                    ${formatMoney(
+                        check.balanceSheetBalance
+                    )}
+                </p>
+
+                <p>
+                    <strong>
+                        Latest Transaction Balance:
+                    </strong>
+
+                    ${formatMoney(
+                        check.transactionBalance
+                    )}
+                </p>
+
+                <p>
+                    <strong>
+                        Difference:
+                    </strong>
+
+                    0.00
+                </p>
+
+            </div>
+
+        `;
+    }
+
+
+    return `
+
+        <div style="
+            padding:16px;
+            border:1px solid #f0c36d;
+            border-radius:6px;
+        ">
+
+            <h3 style="color:#c65d00;">
+                ⚠ Balance Difference Detected
+            </h3>
+
+            <p>
+                <strong>
+                    Balance Sheet:
+                </strong>
+
+                ${formatMoney(
+                    check.balanceSheetBalance
+                )}
+            </p>
+
+            <p>
+                <strong>
+                    Latest Transaction Balance:
+                </strong>
+
+                ${formatMoney(
+                    check.transactionBalance
+                )}
+            </p>
+
+            <p>
+                <strong>
+                    Difference:
+                </strong>
+
+                ${formatMoney(
+                    check.difference
+                )}
+            </p>
+
+        </div>
+
+    `;
+}
+
+
 async function start() {
 
-    // Remove old static containers from index.html
-    document.getElementById("transactions")?.remove();
-    document.getElementById("analysis")?.remove();
+    /*
+     * Remove old static containers from index.html.
+     */
+    document
+        .getElementById("transactions")
+        ?.remove();
 
-    output.innerHTML = "<p>Loading Trial Balance...</p>";
+    document
+        .getElementById("analysis")
+        ?.remove();
 
-    // باقي الكود...
+
+    output.innerHTML =
+        "<p>Loading Trial Balance...</p>";
+
 
     try {
 
         const report =
             await reports.getTrialBalanceReport();
 
+
         const response =
             await manager.getTrialBalanceView(
                 report.item.key
             );
 
+
         if (response.status !== 200)
+
             throw new Error(
                 "Failed to load Trial Balance View"
             );
 
-        const view = response.body;
+
+        const view =
+            response.body;
+
 
         const flatRows = [];
+
 
         function collectRows(node) {
 
@@ -47,41 +470,53 @@ async function start() {
             )
                 return;
 
+
             for (const row of node.items) {
 
                 if (row.cells)
                     flatRows.push(row);
 
+
                 if (row.rows)
                     collectRows(row.rows);
+
             }
+
         }
 
-        collectRows(view.rows);
 
-        const accounts = flatRows.map(row => {
+        collectRows(
+            view.rows
+        );
 
-            const cells = row.cells || [];
 
-            return {
+        const accounts =
+            flatRows.map(row => {
 
-                account:
-                    row.displayName || "",
+                const cells =
+                    row.cells || [];
 
-                debit:
-                    cells[0]?.text || "",
 
-                credit:
-                    cells[1]?.text || "",
+                return {
 
-                debitLink:
-                    cells[0]?.link?.href || "",
+                    account:
+                        row.displayName || "",
 
-                creditLink:
-                    cells[1]?.link?.href || ""
+                    debit:
+                        cells[0]?.text || "",
 
-            };
-        });
+                    credit:
+                        cells[1]?.text || "",
+
+                    debitLink:
+                        cells[0]?.link?.href || "",
+
+                    creditLink:
+                        cells[1]?.link?.href || ""
+
+                };
+
+            });
 
 
         let html = `
@@ -96,9 +531,17 @@ async function start() {
 
                     <tr>
 
-                        <th>Account</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
+                        <th>
+                            Account
+                        </th>
+
+                        <th>
+                            Debit
+                        </th>
+
+                        <th>
+                            Credit
+                        </th>
 
                     </tr>
 
@@ -174,6 +617,7 @@ async function start() {
                 </tr>
 
             `;
+
         }
 
 
@@ -228,197 +672,245 @@ async function start() {
         `;
 
 
-        output.innerHTML = html;
+        output.innerHTML =
+            html;
 
 
         output
-            .querySelectorAll("a[data-link]")
+            .querySelectorAll(
+                "a[data-link]"
+            )
             .forEach(link => {
 
-                link.onclick = async e => {
 
-                    e.preventDefault();
+                link.onclick =
+                    async e => {
 
-                    const box =
-                        document.getElementById(
-                            "transactions"
-                        );
-
-                    const accountBox =
-                        document.getElementById(
-                            "account-audited"
-                        );
-
-                    const analysis =
-                        document.getElementById(
-                            "analysis"
-                        );
+                        e.preventDefault();
 
 
-                    box.innerHTML =
-                        "<p>Loading transactions...</p>";
-
-                    accountBox.innerHTML =
-                        "<p>Loading account...</p>";
-
-                    analysis.innerHTML =
-                        "<p>Analyzing account...</p>";
-
-
-                    try {
-
-                        /*
-                         * Selected Balance Sheet account
-                         */
-
-                        const account = {
-
-                            name:
-                                link.dataset.account,
-
-                            debit:
-                                link.dataset.debit,
-
-                            credit:
-                                link.dataset.credit,
-
-                            transactions: []
-
-                        };
-
-
-                        /*
-                         * Load transactions
-                         */
-
-                        const response =
-                            await manager
-                                .trialBalanceTransactions(
-                                    link.dataset.link
-                                );
-
-
-                        /*
-                         * Extract transactions
-                         */
-
-                        const extracted =
-                            extractor.extract(
-                                response.body
+                        const box =
+                            document.getElementById(
+                                "transactions"
                             );
 
 
-                        account.transactions =
-                            extracted.transactions || [];
-
-
-                        /*
-                         * Account information
-                         */
-
-                        accountBox.innerHTML = `
-
-                            <pre>${JSON.stringify(
-                                {
-                                    name:
-                                        account.name,
-
-                                    debit:
-                                        account.debit,
-
-                                    credit:
-                                        account.credit,
-
-                                    transactionCount:
-                                        account.transactions.length
-                                },
-                                null,
-                                4
-                            )}</pre>
-
-                        `;
-
-
-                        /*
-                         * Audit
-                         */
-
-                        const findings =
-                            audit.analyze(
-                                account
+                        const accountBox =
+                            document.getElementById(
+                                "account-audited"
                             );
+
+
+                        const analysis =
+                            document.getElementById(
+                                "analysis"
+                            );
+
+
+                        box.innerHTML =
+                            "<p>Loading transactions...</p>";
+
+
+                        accountBox.innerHTML =
+                            "<p>Loading account...</p>";
 
 
                         analysis.innerHTML =
-                            audit.render(
-                                findings
-                            );
+                            "<p>Analyzing account...</p>";
 
 
-                        /*
-                         * Display transactions
-                         */
-
-                        const table =
-                            extractTransactions(
-                                response.body
-                            );
+                        try {
 
 
-                        if (!table) {
+                            /*
+                             * Selected Balance Sheet account
+                             */
+
+                            const account = {
+
+                                name:
+                                    link.dataset.account,
+
+                                debit:
+                                    link.dataset.debit,
+
+                                credit:
+                                    link.dataset.credit,
+
+                                transactions: []
+
+                            };
+
+
+                            /*
+                             * Load transactions
+                             */
+
+                            const response =
+                                await manager
+                                    .trialBalanceTransactions(
+                                        link.dataset.link
+                                    );
+
+
+                            /*
+                             * Extract transactions
+                             */
+
+                            const extracted =
+                                extractor.extract(
+                                    response.body
+                                );
+
+
+                            account.transactions =
+                                extracted.transactions || [];
+
+
+                            /*
+                             * Balance Check
+                             */
+
+                            const balanceCheck =
+                                checkBalance(
+                                    account
+                                );
+
+
+                            /*
+                             * Account information
+                             */
+
+                            accountBox.innerHTML = `
+
+                                <pre>${JSON.stringify(
+                                    {
+                                        name:
+                                            account.name,
+
+                                        debit:
+                                            account.debit,
+
+                                        credit:
+                                            account.credit,
+
+                                        transactionCount:
+                                            account.transactions.length,
+
+                                        balanceSheetBalance:
+                                            balanceCheck
+                                                .balanceSheetBalance,
+
+                                        latestTransactionBalance:
+                                            balanceCheck
+                                                .transactionBalance,
+
+                                        difference:
+                                            balanceCheck
+                                                .difference,
+
+                                        balanceMatches:
+                                            balanceCheck
+                                                .matches
+                                    },
+                                    null,
+                                    4
+                                )}</pre>
+
+                            `;
+
+
+                            /*
+                             * Existing audit engine
+                             */
+
+                            const findings =
+                                audit.analyze(
+                                    account
+                                );
+
+
+                            analysis.innerHTML = `
+
+                                ${renderBalanceCheck(
+                                    balanceCheck
+                                )}
+
+                                <br>
+
+                                ${audit.render(
+                                    findings
+                                )}
+
+                            `;
+
+
+                            /*
+                             * Display original transactions table
+                             */
+
+                            const table =
+                                extractTransactions(
+                                    response.body
+                                );
+
+
+                            if (!table) {
+
+                                box.innerHTML =
+                                    "<p>No transaction table found.</p>";
+
+                                return;
+
+                            }
+
 
                             box.innerHTML =
-                                "<p>No transaction table found.</p>";
+                                table;
 
-                            return;
                         }
 
 
-                        box.innerHTML = table;
+                        catch (err) {
 
-                    }
-
-
-                    catch (err) {
-
-                        console.error(err);
+                            console.error(err);
 
 
-                        accountBox.innerHTML = `
+                            accountBox.innerHTML = `
 
-                            <p style="color:red">
+                                <p style="color:red">
 
-                                ${err.message}
+                                    ${err.message}
 
-                            </p>
+                                </p>
 
-                        `;
-
-
-                        analysis.innerHTML = `
-
-                            <p style="color:red">
-
-                                ${err.message}
-
-                            </p>
-
-                        `;
+                            `;
 
 
-                        box.innerHTML = `
+                            analysis.innerHTML = `
 
-                            <p style="color:red">
+                                <p style="color:red">
 
-                                ${err.message}
+                                    ${err.message}
 
-                            </p>
+                                </p>
 
-                        `;
+                            `;
 
-                    }
 
-                };
+                            box.innerHTML = `
+
+                                <p style="color:red">
+
+                                    ${err.message}
+
+                                </p>
+
+                            `;
+
+                        }
+
+                    };
 
             });
 
@@ -430,8 +922,11 @@ async function start() {
         console.error(e);
 
         output.textContent =
-            e.stack || e.message;
+            e.stack ||
+            e.message;
+
     }
+
 }
 
 
