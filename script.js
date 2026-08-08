@@ -197,11 +197,47 @@ function getLatestTransaction(
  * Compare Balance Sheet balance
  * with latest transaction balance.
  */
-function checkBalance(account, finalBalance) {
+function checkBalance(
+    account,
+    finalBalance,
+    hasTransactionLedger
+) {
 
     const balanceSheetBalance =
         getBalanceSheetBalance(account);
 
+
+    // -----------------------------------------
+    // No transaction ledger available
+    // -----------------------------------------
+
+    if (!hasTransactionLedger) {
+
+        return {
+
+            available: false,
+
+            balanceSheetBalance,
+
+            transactionBalance: null,
+
+            difference: null,
+
+            matches: null,
+
+            transaction: null,
+
+            reason:
+                "Transaction ledger is not available on this page."
+
+        };
+    }
+
+
+    // -----------------------------------------
+    // Ledger exists but final balance
+    // could not be extracted
+    // -----------------------------------------
 
     if (
         !finalBalance ||
@@ -220,11 +256,18 @@ function checkBalance(account, finalBalance) {
 
             matches: null,
 
-            transaction: null
+            transaction: null,
+
+            reason:
+                "Transaction ledger found, but final balance could not be extracted."
 
         };
     }
 
+
+    // -----------------------------------------
+    // Normal comparison
+    // -----------------------------------------
 
     const transactionBalance =
         Number(finalBalance.value) || 0;
@@ -883,7 +926,8 @@ async function start() {
 const balanceCheck =
     checkBalance(
         account,
-        extracted.finalBalance
+        extracted.finalBalance,
+        extracted.hasTransactionLedger
     );
 
 

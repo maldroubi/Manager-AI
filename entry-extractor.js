@@ -14,19 +14,15 @@ class EntryExtractor {
             this.findTransactionTable(doc);
 
         if (!table) {
-
-            return {
-
-                transactions: [],
-
-                finalBalance: {
-                    value: 0,
-                    side: ""
-                }
-
-            };
-        }
-
+    return {
+        transactions: [],
+        finalBalance: {
+            value: 0,
+            side: ""
+        },
+        hasTransactionLedger: false
+    };
+}
 
         const transactions =
             this.extractTransactions(
@@ -50,14 +46,11 @@ class EntryExtractor {
             );
 
 
-        return {
-
-            transactions,
-
-            finalBalance
-
-        };
-    }
+      return {
+    transactions,
+    finalBalance,
+    hasTransactionLedger: true
+};
 
 
     // ==================================================
