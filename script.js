@@ -1,18 +1,8 @@
-const output =
-    document.getElementById("output");
-
+const output = document.getElementById("output");
 
 function extractTransactions(html) {
-
-    const doc =
-        new DOMParser()
-            .parseFromString(
-                html,
-                "text/html"
-            );
-
-    const table =
-        doc.querySelector("table");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const table = doc.querySelector("table");
 
     if (!table)
         return null;
@@ -20,11 +10,15 @@ function extractTransactions(html) {
     return table.outerHTML;
 }
 
-
 async function start() {
 
-    output.innerHTML =
-        "<p>Loading Trial Balance...</p>";
+    // Remove old static containers from index.html
+    document.getElementById("transactions")?.remove();
+    document.getElementById("analysis")?.remove();
+
+    output.innerHTML = "<p>Loading Trial Balance...</p>";
+
+    // باقي الكود...
 
     try {
 
@@ -41,11 +35,9 @@ async function start() {
                 "Failed to load Trial Balance View"
             );
 
-        const view =
-            response.body;
+        const view = response.body;
 
         const flatRows = [];
-
 
         function collectRows(node) {
 
@@ -62,41 +54,34 @@ async function start() {
 
                 if (row.rows)
                     collectRows(row.rows);
-
             }
-
         }
-
 
         collectRows(view.rows);
 
+        const accounts = flatRows.map(row => {
 
-        const accounts =
-            flatRows.map(row => {
+            const cells = row.cells || [];
 
-                const cells =
-                    row.cells || [];
+            return {
 
-                return {
+                account:
+                    row.displayName || "",
 
-                    account:
-                        row.displayName || "",
+                debit:
+                    cells[0]?.text || "",
 
-                    debit:
-                        cells[0]?.text || "",
+                credit:
+                    cells[1]?.text || "",
 
-                    credit:
-                        cells[1]?.text || "",
+                debitLink:
+                    cells[0]?.link?.href || "",
 
-                    debitLink:
-                        cells[0]?.link?.href || "",
+                creditLink:
+                    cells[1]?.link?.href || ""
 
-                    creditLink:
-                        cells[1]?.link?.href || ""
-
-                };
-
-            });
+            };
+        });
 
 
         let html = `
@@ -111,17 +96,9 @@ async function start() {
 
                     <tr>
 
-                        <th>
-                            Account
-                        </th>
-
-                        <th>
-                            Debit
-                        </th>
-
-                        <th>
-                            Credit
-                        </th>
+                        <th>Account</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
 
                     </tr>
 
@@ -197,15 +174,8 @@ async function start() {
                 </tr>
 
             `;
-
         }
 
-
-        /*
-         * ------------------------------------------------
-         * Main transaction / audit layout
-         * ------------------------------------------------
-         */
 
         html += `
 
@@ -213,14 +183,11 @@ async function start() {
 
             </table>
 
-
             <hr>
-
 
             <h2>
                 Transactions
             </h2>
-
 
             <div id="transactions">
 
@@ -230,14 +197,11 @@ async function start() {
 
             </div>
 
-
             <hr>
-
 
             <h2>
                 Account Being Audited
             </h2>
-
 
             <div id="account-audited">
 
@@ -247,14 +211,11 @@ async function start() {
 
             </div>
 
-
             <hr>
-
 
             <h2>
                 Audit Findings
             </h2>
-
 
             <div id="analysis">
 
@@ -264,290 +225,200 @@ async function start() {
 
             </div>
 
-
-            <hr>
-
-
-            <h2>
-                Transactions
-            </h2>
-
-
-            <div id="transactions-secondary">
-
-                <p>
-                    Select an amount to load transactions.
-                </p>
-
-            </div>
-
         `;
 
 
-        output.innerHTML =
-            html;
+        output.innerHTML = html;
 
-
-        /*
-         * ------------------------------------------------
-         * Account links
-         * ------------------------------------------------
-         */
 
         output
-            .querySelectorAll(
-                "a[data-link]"
-            )
+            .querySelectorAll("a[data-link]")
             .forEach(link => {
 
+                link.onclick = async e => {
 
-                link.onclick =
-                    async e => {
+                    e.preventDefault();
 
-                        e.preventDefault();
+                    const box =
+                        document.getElementById(
+                            "transactions"
+                        );
+
+                    const accountBox =
+                        document.getElementById(
+                            "account-audited"
+                        );
+
+                    const analysis =
+                        document.getElementById(
+                            "analysis"
+                        );
 
 
-                        const box =
-                            document.getElementById(
-                                "transactions"
+                    box.innerHTML =
+                        "<p>Loading transactions...</p>";
+
+                    accountBox.innerHTML =
+                        "<p>Loading account...</p>";
+
+                    analysis.innerHTML =
+                        "<p>Analyzing account...</p>";
+
+
+                    try {
+
+                        /*
+                         * Selected Balance Sheet account
+                         */
+
+                        const account = {
+
+                            name:
+                                link.dataset.account,
+
+                            debit:
+                                link.dataset.debit,
+
+                            credit:
+                                link.dataset.credit,
+
+                            transactions: []
+
+                        };
+
+
+                        /*
+                         * Load transactions
+                         */
+
+                        const response =
+                            await manager
+                                .trialBalanceTransactions(
+                                    link.dataset.link
+                                );
+
+
+                        /*
+                         * Extract transactions
+                         */
+
+                        const extracted =
+                            extractor.extract(
+                                response.body
                             );
 
 
-                        const secondaryBox =
-                            document.getElementById(
-                                "transactions-secondary"
+                        account.transactions =
+                            extracted.transactions || [];
+
+
+                        /*
+                         * Account information
+                         */
+
+                        accountBox.innerHTML = `
+
+                            <pre>${JSON.stringify(
+                                {
+                                    name:
+                                        account.name,
+
+                                    debit:
+                                        account.debit,
+
+                                    credit:
+                                        account.credit,
+
+                                    transactionCount:
+                                        account.transactions.length
+                                },
+                                null,
+                                4
+                            )}</pre>
+
+                        `;
+
+
+                        /*
+                         * Audit
+                         */
+
+                        const findings =
+                            audit.analyze(
+                                account
                             );
-
-
-                        const accountBox =
-                            document.getElementById(
-                                "account-audited"
-                            );
-
-
-                        const analysis =
-                            document.getElementById(
-                                "analysis"
-                            );
-
-
-                        box.innerHTML =
-                            "<p>Loading transactions...</p>";
-
-
-                        secondaryBox.innerHTML =
-                            "<p>Loading transactions...</p>";
-
-
-                        accountBox.innerHTML =
-                            "<p>Loading account...</p>";
 
 
                         analysis.innerHTML =
-                            "<p>Analyzing account...</p>";
+                            audit.render(
+                                findings
+                            );
 
 
-                        try {
+                        /*
+                         * Display transactions
+                         */
+
+                        const table =
+                            extractTransactions(
+                                response.body
+                            );
 
 
-                            /*
-                             * --------------------------------
-                             * Account selected from Trial Balance
-                             * --------------------------------
-                             */
-
-                            const account = {
-
-                                name:
-                                    link.dataset.account,
-
-                                debit:
-                                    link.dataset.debit,
-
-                                credit:
-                                    link.dataset.credit,
-
-                                transactions: []
-
-                            };
-
-
-                            /*
-                             * --------------------------------
-                             * Load transaction history
-                             * --------------------------------
-                             */
-
-                            const response =
-                                await manager
-                                    .trialBalanceTransactions(
-                                        link.dataset.link
-                                    );
-
-
-                            /*
-                             * --------------------------------
-                             * Extract transactions
-                             * --------------------------------
-                             */
-
-                            const extracted =
-                                extractor.extract(
-                                    response.body
-                                );
-
-
-                            account.transactions =
-                                extracted.transactions || [];
-
-
-                            /*
-                             * --------------------------------
-                             * Display Account Being Audited
-                             * --------------------------------
-                             */
-
-                            accountBox.innerHTML = `
-
-                                <pre>${JSON.stringify(
-                                    {
-                                        name:
-                                            account.name,
-
-                                        debit:
-                                            account.debit,
-
-                                        credit:
-                                            account.credit,
-
-                                        transactionCount:
-                                            account.transactions.length
-                                    },
-                                    null,
-                                    4
-                                )}</pre>
-
-                            `;
-
-
-                            /*
-                             * --------------------------------
-                             * Run Audit
-                             * --------------------------------
-                             */
-
-                            const findings =
-                                audit.analyze(
-                                    account
-                                );
-
-
-                            analysis.innerHTML =
-                                audit.render(
-                                    findings
-                                );
-
-
-                            /*
-                             * --------------------------------
-                             * Extract original transaction table
-                             * --------------------------------
-                             */
-
-                            const table =
-                                extractTransactions(
-                                    response.body
-                                );
-
-
-                            if (!table) {
-
-                                box.innerHTML =
-                                    "<p>No transaction table found.</p>";
-
-                                secondaryBox.innerHTML =
-                                    "<p>No transaction table found.</p>";
-
-                                return;
-
-                            }
-
-
-                            /*
-                             * --------------------------------
-                             * First Transactions box
-                             * --------------------------------
-                             */
+                        if (!table) {
 
                             box.innerHTML =
-                                table;
+                                "<p>No transaction table found.</p>";
 
-
-                            /*
-                             * --------------------------------
-                             * Second Transactions box
-                             *
-                             * Keep the original layout.
-                             * --------------------------------
-                             */
-
-                            secondaryBox.innerHTML =
-                                table;
-
+                            return;
                         }
 
 
-                        catch (err) {
+                        box.innerHTML = table;
 
-                            console.error(err);
-
-
-                            accountBox.innerHTML = `
-
-                                <p style="color:red">
-
-                                    ${err.message}
-
-                                </p>
-
-                            `;
+                    }
 
 
-                            analysis.innerHTML = `
+                    catch (err) {
 
-                                <p style="color:red">
-
-                                    ${err.message}
-
-                                </p>
-
-                            `;
+                        console.error(err);
 
 
-                            box.innerHTML = `
+                        accountBox.innerHTML = `
 
-                                <p style="color:red">
+                            <p style="color:red">
 
-                                    ${err.message}
+                                ${err.message}
 
-                                </p>
+                            </p>
 
-                            `;
+                        `;
 
 
-                            secondaryBox.innerHTML = `
+                        analysis.innerHTML = `
 
-                                <p style="color:red">
+                            <p style="color:red">
 
-                                    ${err.message}
+                                ${err.message}
 
-                                </p>
+                            </p>
 
-                            `;
+                        `;
 
-                        }
 
-                    };
+                        box.innerHTML = `
+
+                            <p style="color:red">
+
+                                ${err.message}
+
+                            </p>
+
+                        `;
+
+                    }
+
+                };
 
             });
 
@@ -559,11 +430,8 @@ async function start() {
         console.error(e);
 
         output.textContent =
-            e.stack ||
-            e.message;
-
+            e.stack || e.message;
     }
-
 }
 
 
