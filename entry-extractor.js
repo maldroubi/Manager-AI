@@ -71,11 +71,9 @@ class EntryExtractor {
         const candidates = [];
 
         for (const element of elements) {
-            // Account-detail totals may themselves be inside a table.
-            // Only ignore ordinary detail rows, not table footers/totals.
-            if (element.closest("tbody tr")) {
-                continue;
-            }
+            // Account-detail totals may be rendered inside the same table
+            // as the customer/detail rows. Do not discard them just because
+            // they are inside a <tbody>; scoring below prefers totals.
 
             const text = this.clean(element);
 
@@ -97,8 +95,12 @@ class EntryExtractor {
                     `${parent.id || ""} ${parent.className || ""}`
                         .toLowerCase();
 
-                if (/total|balance|summary|footer|grand|amount/.test(marker)) {
+                if (/total|balance|summary|footer|grand|amount|blue|primary/.test(marker)) {
                     score += 100;
+                }
+
+                if (parent.tagName === "TFOOT") {
+                    score += 150;
                 }
 
                 const moneyChildren =
@@ -118,12 +120,12 @@ class EntryExtractor {
 
             candidates.push({
                 value,
+                score: score + (value > 0 ? 1 : -25),
                 side: /\bCr\b/i.test(text)
                     ? "credit"
                     : /\bDr\b/i.test(text)
                         ? "debit"
-                        : "",
-                score
+                        : ""
             });
         }
 
