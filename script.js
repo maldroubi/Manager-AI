@@ -976,7 +976,27 @@ const balanceCheck =
 
                                             balanceMatches:
                                                 balanceCheck
-                                                    .matches
+                                                    .matches,
+
+                                            transactionLedgerAvailable:
+                                                account.transactionLedgerAvailable,
+
+                                            transactionSource:
+                                                account.transactionLedgerAvailable
+                                                    ? "transaction-ledger"
+                                                    : "not-available",
+
+                                            extractionReason:
+                                                account.transactionMeta.reason || "",
+
+                                            tableCount:
+                                                account.transactionMeta.tableCount ?? null,
+
+                                            selectedTableIndex:
+                                                account.transactionMeta.selectedTableIndex ?? null,
+
+                                            transactionRowsDetected:
+                                                account.transactionMeta.transactionRows ?? 0
 
                                         },
 

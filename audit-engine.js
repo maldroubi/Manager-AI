@@ -19,7 +19,21 @@ class AuditEngine {
             }];
         }
 
-        return this.auditor.analyze(account);
+        const findings = this.auditor.analyze(account);
+
+        if (account.transactionLedgerAvailable === false) {
+            findings.unshift({
+                severity: "info",
+                code: "TRANSACTION_LEDGER_UNAVAILABLE",
+                title: "Transaction ledger unavailable",
+                description: account.transactionMeta?.reason ||
+                    "No transaction ledger was available on the returned account page, so transaction-level audit rules were not evaluated.",
+                recommendation: "Confirm whether this account has a transaction ledger. If it does, inspect the extraction diagnostics below and update the extractor for that Manager page structure.",
+                confidence: 1
+            });
+        }
+
+        return findings;
     }
 
     render(findings) {
@@ -51,7 +65,9 @@ class AuditEngine {
             ? "#d32f2f"
             : severity === "medium"
                 ? "#f0a000"
-                : "#999";
+                : severity === "info"
+                    ? "#607d8b"
+                    : "#999";
 
         const label = severity.toUpperCase();
 
