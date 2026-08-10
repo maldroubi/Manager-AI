@@ -56,91 +56,76 @@ function normalizeManagerPath(href) {
 function findTransactionLedgerHref(html, sourcePath = "") {
 
     /*
-     * The most reliable signal on Manager's current trial-balance pages is
-     * the URL itself.  The account link often lands on
-     * /summary-transactions?... and the real ledger is the same query on
-     * /transactions?... .  Use that before relying on the rendered anchor
-     * text, which can vary with language/version.
+     * Manager can open an account from several summary pages
+     * (/summary-view, /summary-transactions, etc.).  In the current
+     * Manager build the real ledger uses the SAME query string on
+     * /transactions.  Therefore, when we have a Manager URL with a query,
+     * prefer converting its pathname to /transactions instead of depending
+     * on an anchor being present in the returned HTML.
      */
-    if (sourcePath) {
+    const candidates = [];
+
+    if (sourcePath) candidates.push(sourcePath);
+    if (typeof window !== "undefined" && window.location?.href) {
+        candidates.push(window.location.href);
+    }
+
+    for (const candidate of candidates) {
         try {
-            const sourceUrl = new URL(sourcePath, window.location.href);
-            if (/\/summary-transactions(?:\?|$)/i.test(sourceUrl.pathname)) {
-                sourceUrl.pathname = sourceUrl.pathname.replace(
-                    /\/summary-transactions$/i,
-                    "/transactions"
-                );
-                return normalizeManagerPath(sourceUrl.href);
+            const url = new URL(candidate, window.location.href);
+
+            if (!url.search) continue;
+
+            if (/\/transactions$/i.test(url.pathname)) {
+                return normalizeManagerPath(url.href);
+            }
+
+            /*
+             * For summary-view, summary-transactions, and similar Manager
+             * account pages, preserve the complete query and switch only
+             * the pathname to the real ledger endpoint.
+             */
+            if (
+                /\/(?:summary-view|summary-transactions)(?:\/)?$/i.test(url.pathname) ||
+                /summary/i.test(url.pathname)
+            ) {
+                url.pathname = "/transactions";
+                return normalizeManagerPath(url.href);
             }
         } catch (err) {
             // Continue with HTML link discovery below.
         }
     }
 
-    if (!html)
-        return "";
+    if (!html) return "";
 
-    const doc =
-        new DOMParser().parseFromString(
-            html,
-            "text/html"
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const links = [...doc.querySelectorAll("a[href]")];
+
+    /* Prefer an explicit direct /transactions link. */
+    const explicit = links.find(a => {
+        const text = (a.innerText || a.textContent || "").trim().toLowerCase();
+        const href = a.getAttribute("href") || "";
+        return (
+            text === "transactions" &&
+            /\/transactions(?:\?|$)/i.test(href) &&
+            !/\/summary-transactions(?:\?|$)/i.test(href)
         );
+    });
 
-    const links =
-        [...doc.querySelectorAll("a[href]")];
+    if (explicit) return normalizeManagerPath(explicit.getAttribute("href"));
 
-    /*
-     * Prefer an explicit "Transactions" link.
-     */
-    const explicit =
-        links.find(a => {
-
-            const text =
-                (a.innerText ||
-                 a.textContent ||
-                 "")
-                    .trim()
-                    .toLowerCase();
-
-            const href =
-                a.getAttribute("href") || "";
-
-            return (
-                text === "transactions" &&
-                /\/transactions(?:\?|$)/i.test(href) &&
-                !/\/summary-transactions(?:\?|$)/i.test(href)
-            );
-
-        });
-
-    if (explicit)
-        return normalizeManagerPath(
-            explicit.getAttribute("href")
+    /* Fallback: any direct /transactions URL. */
+    const direct = links.find(a => {
+        const href = a.getAttribute("href") || "";
+        return (
+            /\/transactions(?:\?|$)/i.test(href) &&
+            !/\/summary-transactions(?:\?|$)/i.test(href)
         );
+    });
 
-    /*
-     * Fallback: any direct /transactions URL.
-     */
-    const direct =
-        links.find(a => {
-
-            const href =
-                a.getAttribute("href") || "";
-
-            return (
-                /\/transactions(?:\?|$)/i.test(href) &&
-                !/\/summary-transactions(?:\?|$)/i.test(href)
-            );
-
-        });
-
-    return direct
-        ? normalizeManagerPath(
-            direct.getAttribute("href")
-        )
-        : "";
+    return direct ? normalizeManagerPath(direct.getAttribute("href")) : "";
 }
-
 
 async function loadTransactionLedger(
     initialResponse,
