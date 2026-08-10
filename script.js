@@ -1002,7 +1002,19 @@ async function start() {
                                                 account.transactionMeta.selectedTableIndex ?? null,
 
                                             transactionRowsDetected:
-                                                account.transactionMeta.transactionRows ?? 0
+                                                account.transactionMeta.transactionRows ?? 0,
+
+                                            bodyHtmlLength:
+                                                account.transactionMeta.bodyHtmlLength ?? null,
+
+                                            rowLikeCount:
+                                                account.transactionMeta.rowLikeCount ?? null,
+
+                                            tableCandidates:
+                                                account.transactionMeta.candidates ?? [],
+
+                                            rowLikeSamples:
+                                                account.transactionMeta.rowLikeSamples ?? []
 
                                         },
 

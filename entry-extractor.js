@@ -44,6 +44,7 @@ class EntryExtractor {
 
     inspectDocument(doc) {
         const tables = [...doc.querySelectorAll("table")];
+        const bodyText = this.clean(doc.body || doc).slice(0, 1200);
         const candidates = tables.map((table, index) => {
             const rows = [...table.querySelectorAll("tbody tr")];
             const rowInfo = rows.map(tr => {
@@ -56,20 +57,33 @@ class EntryExtractor {
 
             const transactionRows = rows.filter(tr => this.isTransactionRow(tr));
 
+            const headerCells = [...table.querySelectorAll("thead th")].map(th => this.clean(th)).slice(0, 20);
             return {
                 index,
                 rows: rows.length,
                 transactionRows: transactionRows.length,
                 maxCells: rowInfo.reduce((max, row) => Math.max(max, row.cells), 0),
-                sample: rowInfo.slice(0, 3)
+                headers: headerCells,
+                sample: rowInfo.slice(0, 5)
             };
         });
 
         const selectedIndex = candidates.findIndex(c => c.transactionRows > 0);
 
+        const bodyHtmlLength = doc.body ? doc.body.innerHTML.length : 0;
+        const rowLikeCandidates = [...doc.querySelectorAll('[role="row"], tr')].slice(0, 50).map(el => ({
+            tag: el.tagName,
+            cells: el.children ? el.children.length : 0,
+            text: this.clean(el).slice(0, 180)
+        }));
+
         return {
             tableCount: tables.length,
+            bodyHtmlLength,
+            bodyTextSample: bodyText,
             candidates,
+            rowLikeCount: doc.querySelectorAll('[role="row"], tr').length,
+            rowLikeSamples: rowLikeCandidates.slice(0, 10),
             selectedTableIndex: selectedIndex >= 0 ? selectedIndex : null,
             selectedTable: selectedIndex >= 0 ? tables[selectedIndex] : null
         };
