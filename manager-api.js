@@ -106,7 +106,34 @@ class ManagerAPI {
 
     async trialBalanceTransactions(path) {
 
-        return await this.request(path);
+        /*
+         * Manager returns absolute URLs for some report links,
+         * including /summary-transactions.
+         *
+         * The parent API bridge expects a Manager request path,
+         * not an absolute URL. Normalize the URL to pathname + query.
+         */
+        let requestPath = path;
+
+        try {
+
+            const url = new URL(
+                String(path || ""),
+                window.location.href
+            );
+
+            requestPath =
+                url.pathname +
+                url.search +
+                url.hash;
+
+        } catch (err) {
+
+            requestPath = path;
+
+        }
+
+        return await this.request(requestPath);
 
     }
 
