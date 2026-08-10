@@ -53,7 +53,29 @@ function normalizeManagerPath(href) {
 }
 
 
-function findTransactionLedgerHref(html) {
+function findTransactionLedgerHref(html, sourcePath = "") {
+
+    /*
+     * The most reliable signal on Manager's current trial-balance pages is
+     * the URL itself.  The account link often lands on
+     * /summary-transactions?... and the real ledger is the same query on
+     * /transactions?... .  Use that before relying on the rendered anchor
+     * text, which can vary with language/version.
+     */
+    if (sourcePath) {
+        try {
+            const sourceUrl = new URL(sourcePath, window.location.href);
+            if (/\/summary-transactions(?:\?|$)/i.test(sourceUrl.pathname)) {
+                sourceUrl.pathname = sourceUrl.pathname.replace(
+                    /\/summary-transactions$/i,
+                    "/transactions"
+                );
+                return normalizeManagerPath(sourceUrl.href);
+            }
+        } catch (err) {
+            // Continue with HTML link discovery below.
+        }
+    }
 
     if (!html)
         return "";
@@ -121,7 +143,8 @@ function findTransactionLedgerHref(html) {
 
 
 async function loadTransactionLedger(
-    initialResponse
+    initialResponse,
+    initialPath = ""
 ) {
 
     let response =
@@ -155,9 +178,18 @@ async function loadTransactionLedger(
      * If this is an intermediate Manager page,
      * follow its real Transactions link.
      */
+    const sourcePath =
+        initialPath ||
+        response?.path ||
+        response?.url ||
+        initialResponse?.path ||
+        initialResponse?.url ||
+        "";
+
     const ledgerHref =
         findTransactionLedgerHref(
-            html
+            html,
+            sourcePath
         );
 
     if (!ledgerHref) {
@@ -1115,7 +1147,8 @@ async function start() {
                                  */
                                 const ledger =
                                     await loadTransactionLedger(
-                                        initialResponse
+                                        initialResponse,
+                                        link.dataset.link
                                     );
 
 
