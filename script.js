@@ -1,3 +1,4 @@
+console.log("MANAGER-AI BUILD: 20260810-5");
 const output = document.getElementById("output");
 
 
