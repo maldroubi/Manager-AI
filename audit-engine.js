@@ -21,7 +21,14 @@ class AuditEngine {
 
         const findings = this.auditor.analyze(account);
 
-        if (account.transactionLedgerAvailable === false) {
+        const transactionCount = Array.isArray(account.transactions)
+            ? account.transactions.filter(Boolean).length
+            : 0;
+
+        // Do not report the ledger as unavailable when the extractor actually
+        // returned transaction rows. This keeps the audit state consistent
+        // even if a legacy caller did not set transactionLedgerAvailable.
+        if (account.transactionLedgerAvailable === false && transactionCount === 0) {
             findings.unshift({
                 severity: "info",
                 code: "TRANSACTION_LEDGER_UNAVAILABLE",

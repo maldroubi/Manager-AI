@@ -194,52 +194,84 @@ async function loadTransactionLedger(
     console.log("TRANSACTION LEDGER SOURCE PATH:", sourcePath);
     console.log("TRANSACTION LEDGER LINK:", ledgerHref);
 
-    const ledgerResponse =
-        await manager
-            .trialBalanceTransactions(
-                ledgerHref
-            );
+    /*
+     * Try the discovered ledger first.  Manager has used both /transactions
+     * and /trial-balance-transactions in different builds, so if the first
+     * page is valid HTML but still does not contain transaction rows, try the
+     * alternate ledger endpoint with the exact same query string.
+     */
+    const candidateHrefs = [ledgerHref];
 
-    if (
-        !ledgerResponse ||
-        ledgerResponse.status !== 200
-    ) {
-
-        return {
-            response,
-            html,
-            extracted,
-            source: "ledger-request-failed",
-            ledgerHref
-        };
-
+    try {
+        const discoveredUrl = new URL(ledgerHref, window.location.href);
+        const alternatePath = /\/transactions$/i.test(discoveredUrl.pathname)
+            ? "/trial-balance-transactions"
+            : "/transactions";
+        discoveredUrl.pathname = alternatePath;
+        const alternateHref = normalizeManagerPath(discoveredUrl.href);
+        if (alternateHref && !candidateHrefs.includes(alternateHref)) {
+            candidateHrefs.push(alternateHref);
+        }
+    } catch (err) {
+        // Keep the discovered candidate only.
     }
 
-    const ledgerHtml =
-        ledgerResponse.body || "";
+    let lastResponse = null;
+    let lastExtracted = extracted;
+    let successfulHref = ledgerHref;
 
-    console.log("TRANSACTION LEDGER STATUS:", ledgerResponse.status);
-    console.log("TRANSACTION LEDGER HTML LENGTH:", ledgerHtml.length);
+    for (const candidateHref of candidateHrefs) {
+        console.log("TRANSACTION LEDGER REQUEST:", candidateHref);
 
-    const ledgerExtracted =
-        extractor.extract(
-            ledgerHtml
-        );
+        const candidateResponse =
+            await manager
+                .trialBalanceTransactions(candidateHref);
 
-    console.log("TRANSACTION LEDGER EXTRACTED:", {
-        transactions: ledgerExtracted.transactions?.length || 0,
-        hasTransactionLedger: ledgerExtracted.hasTransactionLedger,
-        tableCount: ledgerExtracted.diagnostics?.tableCount,
-        selectedTableIndex: ledgerExtracted.diagnostics?.selectedTableIndex,
-        candidates: ledgerExtracted.diagnostics?.candidates || []
-    });
+        lastResponse = candidateResponse;
+
+        if (!candidateResponse || candidateResponse.status !== 200) {
+            console.warn(
+                "TRANSACTION LEDGER REQUEST FAILED:",
+                candidateHref,
+                candidateResponse?.status
+            );
+            continue;
+        }
+
+        const candidateHtml = candidateResponse.body || "";
+        const candidateExtracted = extractor.extract(candidateHtml);
+        lastExtracted = candidateExtracted;
+        successfulHref = candidateHref;
+
+        console.log("TRANSACTION LEDGER RESULT:", {
+            href: candidateHref,
+            status: candidateResponse.status,
+            htmlLength: candidateHtml.length,
+            transactions: candidateExtracted.transactions?.length || 0,
+            hasTransactionLedger: candidateExtracted.hasTransactionLedger,
+            tableCount: candidateExtracted.diagnostics?.tableCount,
+            selectedTableIndex: candidateExtracted.diagnostics?.selectedTableIndex
+        });
+
+        if (candidateExtracted.hasTransactionLedger) {
+            return {
+                response: candidateResponse,
+                html: candidateHtml,
+                extracted: candidateExtracted,
+                source: "followed-transactions-link",
+                ledgerHref: candidateHref
+            };
+        }
+    }
 
     return {
-        response: ledgerResponse,
-        html: ledgerHtml,
-        extracted: ledgerExtracted,
-        source: "followed-transactions-link",
-        ledgerHref
+        response: lastResponse || response,
+        html: lastResponse?.body || html,
+        extracted: lastExtracted,
+        source: lastResponse?.status === 200
+            ? "ledger-page-without-transactions"
+            : "ledger-request-failed",
+        ledgerHref: successfulHref
     };
 
 }
@@ -1241,9 +1273,10 @@ async function start() {
                                                 account.transactionLedgerAvailable,
 
                                             transactionSource:
-                                                account.transactionLedgerAvailable
+                                                account.transactionMeta.transactionSource ||
+                                                (account.transactionLedgerAvailable
                                                     ? "transaction-ledger"
-                                                    : "not-available",
+                                                    : "not-available"),
 
                                             extractionReason:
                                                 account.transactionMeta.reason || "",
