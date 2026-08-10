@@ -919,16 +919,22 @@ async function start() {
                                     );
 
 
-                               account.transactions =
-    extracted.transactions || [];
+                                account.transactions = extracted.transactions || [];
+                                account.transactionLedgerAvailable = extracted.hasTransactionLedger === true;
+                                account.transactionMeta = extracted.diagnostics || {
+                                    reason: extracted.hasTransactionLedger
+                                        ? "Transaction ledger detected and transactions extracted."
+                                        : "Transaction ledger is not available or could not be extracted.",
+                                    tableCount: null,
+                                    selectedTableIndex: null,
+                                    transactionRows: account.transactions.length
+                                };
 
-
-const balanceCheck =
-    checkBalance(
-        account,
-        extracted.finalBalance,
-        extracted.hasTransactionLedger
-    );
+                                const balanceCheck = checkBalance(
+                                    account,
+                                    extracted.finalBalance,
+                                    extracted.hasTransactionLedger
+                                );
 
 
                                 /*

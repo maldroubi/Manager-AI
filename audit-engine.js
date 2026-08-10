@@ -26,7 +26,7 @@ class AuditEngine {
                 severity: "info",
                 code: "TRANSACTION_LEDGER_UNAVAILABLE",
                 title: "Transaction ledger unavailable",
-                description: account.transactionMeta?.reason ||
+                description: (account.transactionMeta && account.transactionMeta.reason) ||
                     "No transaction ledger was available on the returned account page, so transaction-level audit rules were not evaluated.",
                 recommendation: "Confirm whether this account has a transaction ledger. If it does, inspect the extraction diagnostics below and update the extractor for that Manager page structure.",
                 confidence: 1
