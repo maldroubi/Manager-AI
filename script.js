@@ -20,6 +20,203 @@ function extractTransactions(html) {
 
 
 /*
+ * Manager sometimes opens an intermediate "summary-transactions" page
+ * before exposing the real /transactions ledger.
+ *
+ * The audit engine must follow that link instead of treating the
+ * intermediate page as the transaction ledger.
+ */
+function normalizeManagerPath(href) {
+
+    if (!href)
+        return "";
+
+    try {
+
+        const url =
+            new URL(
+                href,
+                window.location.href
+            );
+
+        return (
+            url.pathname +
+            url.search
+        );
+
+    } catch (err) {
+
+        return String(href);
+
+    }
+
+}
+
+
+function findTransactionLedgerHref(html) {
+
+    if (!html)
+        return "";
+
+    const doc =
+        new DOMParser().parseFromString(
+            html,
+            "text/html"
+        );
+
+    const links =
+        [...doc.querySelectorAll("a[href]")];
+
+    /*
+     * Prefer an explicit "Transactions" link.
+     */
+    const explicit =
+        links.find(a => {
+
+            const text =
+                (a.innerText ||
+                 a.textContent ||
+                 "")
+                    .trim()
+                    .toLowerCase();
+
+            const href =
+                a.getAttribute("href") || "";
+
+            return (
+                text === "transactions" &&
+                /\/transactions(?:\?|$)/i.test(href) &&
+                !/\/summary-transactions(?:\?|$)/i.test(href)
+            );
+
+        });
+
+    if (explicit)
+        return normalizeManagerPath(
+            explicit.getAttribute("href")
+        );
+
+    /*
+     * Fallback: any direct /transactions URL.
+     */
+    const direct =
+        links.find(a => {
+
+            const href =
+                a.getAttribute("href") || "";
+
+            return (
+                /\/transactions(?:\?|$)/i.test(href) &&
+                !/\/summary-transactions(?:\?|$)/i.test(href)
+            );
+
+        });
+
+    return direct
+        ? normalizeManagerPath(
+            direct.getAttribute("href")
+        )
+        : "";
+}
+
+
+async function loadTransactionLedger(
+    initialResponse
+) {
+
+    let response =
+        initialResponse;
+
+    let html =
+        response?.body || "";
+
+    /*
+     * First try the page we already received.
+     */
+    let extracted =
+        extractor.extract(
+            html
+        );
+
+    if (
+        extracted.hasTransactionLedger
+    ) {
+
+        return {
+            response,
+            html,
+            extracted,
+            source: "direct"
+        };
+
+    }
+
+    /*
+     * If this is an intermediate Manager page,
+     * follow its real Transactions link.
+     */
+    const ledgerHref =
+        findTransactionLedgerHref(
+            html
+        );
+
+    if (!ledgerHref) {
+
+        return {
+            response,
+            html,
+            extracted,
+            source: "unavailable"
+        };
+
+    }
+
+    console.log(
+        "TRANSACTION LEDGER LINK:",
+        ledgerHref
+    );
+
+    const ledgerResponse =
+        await manager
+            .trialBalanceTransactions(
+                ledgerHref
+            );
+
+    if (
+        !ledgerResponse ||
+        ledgerResponse.status !== 200
+    ) {
+
+        return {
+            response,
+            html,
+            extracted,
+            source: "ledger-request-failed",
+            ledgerHref
+        };
+
+    }
+
+    const ledgerHtml =
+        ledgerResponse.body || "";
+
+    const ledgerExtracted =
+        extractor.extract(
+            ledgerHtml
+        );
+
+    return {
+        response: ledgerResponse,
+        html: ledgerHtml,
+        extracted: ledgerExtracted,
+        source: "followed-transactions-link",
+        ledgerHref
+    };
+
+}
+
+
+/*
  * Convert money text into a number.
  *
  * Examples:
@@ -901,8 +1098,7 @@ async function start() {
                                 /*
                                  * Load transactions
                                  */
-
-                                const response =
+                                const initialResponse =
                                     await manager
                                         .trialBalanceTransactions(
                                             link.dataset.link
@@ -910,25 +1106,52 @@ async function start() {
 
 
                                 /*
-                                 * Extract transactions
+                                 * Load the actual transaction ledger.
+                                 *
+                                 * Some Manager pages return an intermediate
+                                 * summary-transactions page first. Follow its
+                                 * real /transactions link before running the
+                                 * extractor.
                                  */
-
-                                const extracted =
-                                    extractor.extract(
-                                        response.body
+                                const ledger =
+                                    await loadTransactionLedger(
+                                        initialResponse
                                     );
 
 
-                                account.transactions = extracted.transactions || [];
-                                account.transactionLedgerAvailable = extracted.hasTransactionLedger === true;
-                                account.transactionMeta = extracted.diagnostics || {
-                                    reason: extracted.hasTransactionLedger
-                                        ? "Transaction ledger detected and transactions extracted."
-                                        : "Transaction ledger is not available or could not be extracted.",
-                                    tableCount: null,
-                                    selectedTableIndex: null,
-                                    transactionRows: account.transactions.length
-                                };
+                                const response =
+                                    ledger.response;
+
+
+                                const extracted =
+                                    ledger.extracted;
+
+
+                                account.transactions =
+                                    extracted.transactions || [];
+
+                                account.transactionLedgerAvailable =
+                                    extracted.hasTransactionLedger === true;
+
+                                account.transactionMeta =
+                                    extracted.diagnostics || {
+                                        reason:
+                                            extracted.hasTransactionLedger
+                                                ? "Transaction ledger detected and transactions extracted."
+                                                : "Transaction ledger is not available or could not be extracted.",
+                                        tableCount: null,
+                                        selectedTableIndex: null,
+                                        transactionRows:
+                                            account.transactions.length
+                                    };
+
+                                account.transactionMeta.transactionSource =
+                                    ledger.source;
+
+                                if (ledger.ledgerHref) {
+                                    account.transactionMeta.ledgerHref =
+                                        ledger.ledgerHref;
+                                }
 
                                 const balanceCheck = checkBalance(
                                     account,
