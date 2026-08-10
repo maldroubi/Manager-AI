@@ -33,16 +33,18 @@ function normalizeManagerPath(href) {
 
     try {
 
-        const url =
-            new URL(
-                href,
-                window.location.href
-            );
+        const raw = String(href).trim();
+        const url = new URL(raw, window.location.href);
 
-        return (
-            url.pathname +
-            url.search
-        );
+        // IMPORTANT: keep an absolute Manager URL absolute.
+        // The host application/proxy may need the original Manager origin;
+        // converting it to a relative /transactions path can silently return
+        // the wrong HTML page.
+        if (/^https?:\/\//i.test(raw)) {
+            return url.href;
+        }
+
+        return url.pathname + url.search;
 
     } catch (err) {
 
@@ -188,10 +190,8 @@ async function loadTransactionLedger(
 
     }
 
-    console.log(
-        "TRANSACTION LEDGER LINK:",
-        ledgerHref
-    );
+    console.log("TRANSACTION LEDGER SOURCE PATH:", sourcePath);
+    console.log("TRANSACTION LEDGER LINK:", ledgerHref);
 
     const ledgerResponse =
         await manager
@@ -217,10 +217,21 @@ async function loadTransactionLedger(
     const ledgerHtml =
         ledgerResponse.body || "";
 
+    console.log("TRANSACTION LEDGER STATUS:", ledgerResponse.status);
+    console.log("TRANSACTION LEDGER HTML LENGTH:", ledgerHtml.length);
+
     const ledgerExtracted =
         extractor.extract(
             ledgerHtml
         );
+
+    console.log("TRANSACTION LEDGER EXTRACTED:", {
+        transactions: ledgerExtracted.transactions?.length || 0,
+        hasTransactionLedger: ledgerExtracted.hasTransactionLedger,
+        tableCount: ledgerExtracted.diagnostics?.tableCount,
+        selectedTableIndex: ledgerExtracted.diagnostics?.selectedTableIndex,
+        candidates: ledgerExtracted.diagnostics?.candidates || []
+    });
 
     return {
         response: ledgerResponse,
