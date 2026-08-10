@@ -98,16 +98,18 @@ class EntryExtractor {
 
     isTransactionRow(tr) {
         const td = [...tr.querySelectorAll("td")];
-        if (td.length < 8) return false;
+        // Manager uses two transaction-table layouts:
+        //   1) compact ledger: Edit, View, Date, Transaction, Account, Amount (6 cells)
+        //   2) detailed ledger: 12+ cells with contact/description/balance columns.
+        if (td.length < 6) return false;
 
         const text = this.clean(tr);
         const hasDate = /\b\d{1,2}-\d{1,2}-\d{4}\b/.test(text);
-        const hasDocument = /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice)\b/i.test(text);
-        const hasEditView = /\bEdit\b/.test(text) && /\bView\b/.test(text);
+        const hasDocument = /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice|inter account transfer)\b/i.test(text);
+        const hasEditView = /\bEdit\b/i.test(text) && /\bView\b/i.test(text);
 
-        // Current Manager transaction tables normally contain Edit/View plus a date
-        // and document description. The document test is intentionally permissive
-        // so localized/custom document labels do not break extraction.
+        // Require a date plus either a known transaction/document label or
+        // the Edit/View pair used by the current Manager transaction table.
         return hasDate && (hasDocument || hasEditView);
     }
 
@@ -119,17 +121,44 @@ class EntryExtractor {
             const td = [...tr.querySelectorAll("td")];
             if (!this.isTransactionRow(tr)) return;
 
-            // Current Manager layout: Edit, View, Date, Document, Contact,
-            // currency/amount columns, Description, ..., Amount, ..., Balance.
-            // Keep the established 12-column mapping when available.
-            if (td.length < 12) return;
+            let date = "";
+            let documentText = "";
+            let contact = "";
+            let description = "";
+            let amountText = "";
+            let balanceText = "";
+            let editUrl = "";
+            let viewUrl = "";
 
-            const date = this.clean(td[2]);
-            const documentText = this.clean(td[3]);
-            const contact = this.clean(td[4]);
-            const description = this.clean(td[6]);
-            const amountText = this.clean(td[9]);
-            const balanceText = this.clean(td[11]);
+            const links = [...tr.querySelectorAll("a")];
+            editUrl = links.find(a => this.clean(a).toLowerCase() === "edit")?.href || "";
+            viewUrl = links.find(a => this.clean(a).toLowerCase() === "view")?.href || "";
+
+            if (td.length === 6) {
+                // Current compact Manager transaction layout:
+                // Edit | View | Date | Transaction | Account | Amount
+                date = this.clean(td[2]);
+                documentText = this.clean(td[3]);
+                contact = this.clean(td[4]);
+                amountText = this.clean(td[5]);
+            } else if (td.length >= 12) {
+                // Established detailed Manager layout:
+                // Edit, View, Date, Document, Contact, currency/amount columns,
+                // Description, ..., Amount, ..., Balance.
+                date = this.clean(td[2]);
+                documentText = this.clean(td[3]);
+                contact = this.clean(td[4]);
+                description = this.clean(td[6]);
+                amountText = this.clean(td[9]);
+                balanceText = this.clean(td[11]);
+            } else {
+                // Fallback for future Manager variants: use the last cell as amount.
+                date = this.clean(td[2]);
+                documentText = this.clean(td[3]);
+                contact = this.clean(td[4]);
+                amountText = this.clean(td[td.length - 1]);
+            }
+
             const document = this.parseDocument(documentText);
 
             transactions.push({
@@ -139,7 +168,9 @@ class EntryExtractor {
                 description,
                 contact,
                 amount: this.parseAmount(amountText),
-                balance: this.parseBalance(balanceText)
+                balance: this.parseBalance(balanceText),
+                editUrl,
+                viewUrl
             });
         });
 
