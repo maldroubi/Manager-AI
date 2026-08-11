@@ -524,6 +524,47 @@ function checkBalance(
 
 
     // -----------------------------------------
+    // Reject a false "final balance" extracted
+    // from pagination/count UI.
+    //
+    // In Manager's compact transaction view there is
+    // no running-balance column. A value equal to the
+    // number of extracted rows (for example 50) can be
+    // a row/page count, not an account balance. Do not
+    // use it for an accounting comparison.
+    // -----------------------------------------
+
+    const transactionCount =
+        Array.isArray(account.transactions)
+            ? account.transactions.length
+            : 0;
+
+    const allTransactionsWithoutBalance =
+        transactionCount > 0 &&
+        account.transactions.every(transaction => {
+            const balance = transaction?.balance;
+            return !balance || Number(balance.value) === 0;
+        });
+
+    if (
+        transactionCount > 0 &&
+        allTransactionsWithoutBalance &&
+        Number(finalBalance.value) === transactionCount
+    ) {
+        return {
+            available: false,
+            balanceSheetBalance,
+            transactionBalance: null,
+            difference: null,
+            matches: null,
+            transaction: null,
+            reason:
+                "The extracted final-balance value matches the transaction-row count and is not a valid ledger balance."
+        };
+    }
+
+
+    // -----------------------------------------
     // Normal comparison
     // -----------------------------------------
 
