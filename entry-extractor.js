@@ -154,13 +154,10 @@ class EntryExtractor {
                 }
 
 
-                const rawDate =
+                const date =
                     this.clean(
                         td[2]
                     );
-
-                const date =
-                    this.parseTransactionDate(rawDate) || rawDate;
 
 
                 const documentText =
@@ -379,21 +376,124 @@ class EntryExtractor {
 
         /*
          * ------------------------------------------------
-         * METHOD 4 REMOVED
+         * METHOD 4
          *
-         * Never scan arbitrary page elements for a bare money
-         * value. Manager pages contain many unrelated numeric
-         * values (transaction count, pagination, totals, etc.),
-         * and this caused values such as 50.00 to be treated as
-         * the account balance.
+         * Search the entire document for an element
+         * whose visible text is ONLY a currency amount.
+         *
+         * Example:
+         *
+         * AED 25,000.00
+         *
+         * This is the important fallback for the
+         * blue Manager total bar.
          * ------------------------------------------------
          */
+
+        const allElements =
+            [
+                ...doc.querySelectorAll(
+                    "*"
+                )
+            ];
+
+
+        for (
+            const element
+            of allElements
+        ) {
+
+            /*
+             * Ignore elements inside transaction rows.
+             */
+
+            if (
+                element.closest(
+                    "tbody tr"
+                )
+            ) {
+
+                continue;
+
+            }
+
+
+            const text =
+                this.clean(
+                    element
+                );
+
+
+            if (
+                !this.isPureMoneyText(
+                    text
+                )
+            ) {
+
+                continue;
+
+            }
+
+
+            /*
+             * We want the smallest element containing
+             * the exact money text.
+             */
+
+            const childMoney =
+                [
+                    ...element.children
+                ]
+                .some(
+                    child => {
+
+                        return this.isPureMoneyText(
+                            this.clean(
+                                child
+                            )
+                        );
+
+                    }
+                );
+
+
+            if (
+                childMoney
+            ) {
+
+                continue;
+
+            }
+
+
+            const result =
+                this.parseBalanceAmount(
+                    text
+                );
+
+
+            if (
+                result !== null
+            ) {
+
+                return result;
+
+            }
+
+        }
+
 
         /*
          * Nothing found.
          */
 
-        return null;
+        return {
+
+            value: 0,
+
+            side: ""
+
+        };
     }
 
 
@@ -651,30 +751,6 @@ class EntryExtractor {
             side
 
         };
-    }
-
-
-    // ==================================================
-    // NORMALIZE / PARSE TRANSACTION DATE
-    // ==================================================
-
-    parseTransactionDate(value) {
-        if (!value) return null;
-
-        const text = String(value).replace(/\s+/g, " ").trim();
-        if (!text || text === "-") return null;
-
-        let m = text.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-        if (m) {
-            const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-            return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
-        }
-
-        m = text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-        if (m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
-
-        const parsed = Date.parse(text);
-        return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0,10);
     }
 
 

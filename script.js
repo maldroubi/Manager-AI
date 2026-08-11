@@ -74,24 +74,11 @@ function getLatestTransaction(transactions) {
 
 function checkBalance(account) {
     const balanceSheetBalance = getBalanceSheetBalance(account);
-
-    const transactions = Array.isArray(account.transactions)
-        ? account.transactions
-        : [];
-
-    // Only use a transaction balance when the transaction itself has
-    // a valid date and a real parsed balance. Never fall back to the
-    // first row, transaction count, or an arbitrary numeric value.
-    const dated = transactions
-        .filter(t => t && t.date && t.date !== "-")
-        .filter(t => t.balance !== null && t.balance !== undefined && t.balance !== "");
-
-    const latestTransaction = getLatestTransaction(dated);
+    const latestTransaction = getLatestTransaction(account.transactions);
 
     if (!latestTransaction) {
         return {
             available: false,
-            reason: "No dated transaction with a valid running balance was available.",
             balanceSheetBalance,
             transactionBalance: null,
             difference: null,
@@ -100,22 +87,11 @@ function checkBalance(account) {
         };
     }
 
-    const transactionBalance = parseSignedBalance(latestTransaction.balance);
+    const transactionBalance =
+        parseSignedBalance(latestTransaction.balance);
 
-    // A zero balance can be valid. What is not valid is a non-finite value.
-    if (!Number.isFinite(transactionBalance)) {
-        return {
-            available: false,
-            reason: "The latest transaction does not contain a valid running balance.",
-            balanceSheetBalance,
-            transactionBalance: null,
-            difference: null,
-            matches: null,
-            transaction: latestTransaction
-        };
-    }
-
-    const difference = balanceSheetBalance - transactionBalance;
+    const difference =
+        balanceSheetBalance - transactionBalance;
 
     return {
         available: true,
@@ -146,7 +122,7 @@ function renderBalanceCheck(check) {
                 border-radius:6px;
             ">
                 <h3>Balance Check</h3>
-                <p>${check.reason || "No transaction balance was available for comparison."}</p>
+                <p>No transaction balance was available for comparison.</p>
             </div>
         `;
     }
@@ -522,6 +498,13 @@ async function start() {
                         account.transactions =
                             extracted.transactions || [];
 
+                        console.groupCollapsed("[Manager AI] Transaction extraction");
+                        console.log("hasTransactionLedger:", extracted.hasTransactionLedger);
+                        console.log("transactionCount:", account.transactions.length);
+                        console.log("finalBalance:", extracted.finalBalance);
+                        console.log("transactions:", account.transactions);
+                        console.groupEnd();
+
 
                         /*
                          * Account information
@@ -568,9 +551,15 @@ async function start() {
                          */
 
                         const findings =
-                            audit.analyze(
-                                account
-                            );
+                            account.transactions.length === 0
+                            ? [{
+                                severity: "INFO",
+                                title: "Transaction ledger not extracted",
+                                description: "The selected account returned no recognizable transaction rows. Audit rules were not evaluated because the transaction source is incomplete.",
+                                recommendation: "Inspect the transaction request diagnostics in the browser Console before relying on the audit result.",
+                                confidence: 100
+                              }]
+                            : audit.analyze(account);
 
 
                         analysis.innerHTML =
