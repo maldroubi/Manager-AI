@@ -122,8 +122,18 @@ class ManagerAPI {
                 window.location.href
             );
 
+            let pathname = url.pathname;
+
+            // Manager report links can expose an intermediate transaction page.
+            // The actual ledger endpoint is /transactions. Keep the full query
+            // string/hash because Manager uses the opaque query as the view key.
+            if (/\/(summary-transactions|trial-balance-transactions)\/?$/i.test(pathname)) {
+                console.log("[Manager AI] transaction route:", pathname, "-> /transactions");
+                pathname = "/transactions";
+            }
+
             requestPath =
-                url.pathname +
+                pathname +
                 url.search +
                 url.hash;
 

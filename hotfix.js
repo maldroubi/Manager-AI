@@ -13,9 +13,10 @@
     window.manager.trialBalanceTransactions = async function (path) {
         try {
             const url = new URL(String(path || ""), window.location.href);
-            if (/\/summary-transactions\/?$/i.test(url.pathname)) {
+            if (/\/(summary-transactions|trial-balance-transactions)\/?$/i.test(url.pathname)) {
+                const originalPath = url.pathname;
                 url.pathname = "/transactions";
-                console.log("[Manager AI] hotfix: summary-transactions ->", url.href);
+                console.log("[Manager AI] hotfix:", originalPath, "->", url.href);
                 return await original(url.pathname + url.search + url.hash);
             }
         } catch (err) {
