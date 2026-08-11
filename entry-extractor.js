@@ -60,55 +60,46 @@ class EntryExtractor {
 
     findTransactionTable(doc) {
 
-        const tables =
-            [
-                ...doc.querySelectorAll(
-                    "table"
-                )
-            ];
+        const tables = [...doc.querySelectorAll("table")];
 
+        let best = null;
+        let bestScore = 0;
 
-        for (
-            const table
-            of tables
-        ) {
+        for (const table of tables) {
+            const rows = [...table.querySelectorAll("tbody tr")];
+            let score = 0;
 
-            const rows =
-                [
-                    ...table.querySelectorAll(
-                        "tbody tr"
-                    )
-                ];
+            for (const tr of rows) {
+                const cells = [...tr.querySelectorAll("td")];
+                const text = cells.map(td => this.clean(td)).join(" | ");
 
-
-            const hasTransactionRows =
-                rows.some(
-                    tr => {
-
-                        const td =
-                            tr.querySelectorAll(
-                                "td"
-                            );
-
-
-                        return td.length >= 12;
-
-                    }
+                const hasDate = cells.some(td =>
+                    /^\\d{1,2}-\\d{1,2}-\\d{4}$/.test(this.clean(td))
                 );
 
+                const hasMoney = cells.some(td =>
+                    /(?:AED|SAR|USD|\\$|Dr\\b|Cr\\b)/i.test(this.clean(td)) &&
+                    /\\d/.test(this.clean(td))
+                );
 
-            if (
-                hasTransactionRows
-            ) {
-
-                return table;
-
+                // Manager's summary-transactions page currently renders
+                // compact rows such as:
+                // Edit | View | 12-06-2026 | Payment |
+                // Cash & cash equivalents | AED 2,524.86 Cr
+                if (hasDate && hasMoney) {
+                    score += 3;
+                } else if (cells.length >= 5 && /\\d{1,2}-\\d{1,2}-\\d{4}/.test(text)) {
+                    score += 1;
+                }
             }
 
+            if (score > bestScore) {
+                bestScore = score;
+                best = table;
+            }
         }
 
-
-        return null;
+        return bestScore > 0 ? best : null;
     }
 
 
@@ -116,115 +107,56 @@ class EntryExtractor {
     // EXTRACT TRANSACTIONS
     // ==================================================
 
-    extractTransactions(
-        table
-    ) {
+    extractTransactions(table) {
 
         const transactions = [];
+        const rows = [...table.querySelectorAll("tbody tr")];
 
+        rows.forEach(tr => {
+            const td = [...tr.querySelectorAll("td")];
+            if (td.length < 5) return;
 
-        const rows =
-            table.querySelectorAll(
-                "tbody tr"
+            const values = td.map(cell => this.clean(cell));
+            const dateIndex = values.findIndex(value =>
+                /^\\d{1,2}-\\d{1,2}-\\d{4}$/.test(value)
             );
 
+            if (dateIndex < 0) return;
 
-        rows.forEach(
-            tr => {
-
-                const td =
-                    [
-                        ...tr.querySelectorAll(
-                            "td"
-                        )
-                    ];
-
-
-                /*
-                 * Manager transaction row
-                 * contains 12 columns.
-                 */
-
-                if (
-                    td.length < 12
-                ) {
-
-                    return;
-
+            const date = values[dateIndex];
+            const amountIndex = (() => {
+                for (let i = values.length - 1; i > dateIndex; i--) {
+                    if (/(?:AED|SAR|USD|\\$|Dr\\b|Cr\\b)/i.test(values[i]) && /\\d/.test(values[i])) {
+                        return i;
+                    }
                 }
+                return values.length - 1;
+            })();
 
+            const amountText = values[amountIndex] || "";
 
-                const date =
-                    this.clean(
-                        td[2]
-                    );
+            // In the current compact Manager ledger there is no separate
+            // running-balance column. Keep the amount as the transaction
+            // amount and leave balance unavailable rather than fabricating it.
+            const typeText = values[dateIndex + 1] || "";
+            const description = values.slice(dateIndex + 2, amountIndex).join(" ").trim();
 
+            const document = this.parseDocument(typeText);
 
-                const documentText =
-                    this.clean(
-                        td[3]
-                    );
-
-
-                const contact =
-                    this.clean(
-                        td[4]
-                    );
-
-
-                const description =
-                    this.clean(
-                        td[6]
-                    );
-
-
-                const amountText =
-                    this.clean(
-                        td[9]
-                    );
-
-
-                const balanceText =
-                    this.clean(
-                        td[11]
-                    );
-
-
-                const document =
-                    this.parseDocument(
-                        documentText
-                    );
-
-
-                transactions.push({
-
-                    date,
-
-                    documentType:
-                        document.type,
-
-                    documentNumber:
-                        document.number,
-
-                    description,
-
-                    contact,
-
-                    amount:
-                        this.parseAmount(
-                            amountText
-                        ),
-
-                    balance:
-                        this.parseBalance(
-                            balanceText
-                        )
-
-                });
-
-            }
-        );
-
+            transactions.push({
+                date,
+                documentType: document.type || typeText,
+                documentNumber: document.number,
+                description,
+                contact: "",
+                amount: this.parseAmount(amountText),
+                balance: {
+                    value: 0,
+                    side: ""
+                },
+                balanceAvailable: false
+            });
+        });
 
         return transactions;
     }
