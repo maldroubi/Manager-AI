@@ -1,349 +1,854 @@
 // entry-extractor.js
-// Extracts transaction ledger data and exposes diagnostics when a ledger
-// is missing or cannot be recognized.
 
 class EntryExtractor {
 
     extract(html) {
-        const doc = new DOMParser().parseFromString(html || "", "text/html");
-        const diagnostics = this.inspectDocument(doc);
-        const table = diagnostics.selectedTable;
+
+        const doc =
+            new DOMParser().parseFromString(
+                html,
+                "text/html"
+            );
+
+        const table =
+            this.findTransactionTable(doc);
 
         if (!table) {
-            return {
-                transactions: [],
-                finalBalance: null,
-                hasTransactionLedger: false,
-                diagnostics: {
-                    ...diagnostics,
-                    selectedTable: undefined,
-                    reason: "No transaction ledger table was recognized on the returned page."
-                }
-            };
-        }
+    return {
+        transactions: [],
+        finalBalance: {
+            value: 0,
+            side: ""
+        },
+        hasTransactionLedger: false
+    };
+}
 
-        const transactions = this.extractTransactions(table);
-        const finalBalance = this.extractFinalBalance(doc, table);
-        const hasTransactionLedger = transactions.length > 0;
+        const transactions =
+            this.extractTransactions(
+                table
+            );
 
-        return {
-            transactions,
-            finalBalance,
-            hasTransactionLedger,
-            diagnostics: {
-                ...diagnostics,
-                selectedTable: undefined,
-                transactionRows: transactions.length,
-                hasTransactionLedger,
-                reason: hasTransactionLedger
-                    ? "Transaction ledger detected and transactions extracted."
-                    : "A table was found, but no transaction rows could be extracted from it."
-            }
-        };
+
+        /*
+         * IMPORTANT:
+         *
+         * The Manager total/balance bar may be
+         * outside the transaction table.
+         *
+         * Therefore we pass the complete document.
+         */
+
+        const finalBalance =
+            this.extractFinalBalance(
+                doc,
+                table
+            );
+
+
+      return {
+    transactions,
+    finalBalance,
+    hasTransactionLedger: true
+};
     }
 
-    inspectDocument(doc) {
-        const tables = [...doc.querySelectorAll("table")];
-        const bodyText = this.clean(doc.body || doc).slice(0, 1200);
-        const candidates = tables.map((table, index) => {
-            const rows = [...table.querySelectorAll("tbody tr")];
-            const rowInfo = rows.map(tr => {
-                const cells = [...tr.querySelectorAll("td")];
-                return {
-                    cells: cells.length,
-                    text: this.clean(tr).slice(0, 180)
-                };
-            });
 
-            const transactionRows = rows.filter(tr => this.isTransactionRow(tr));
-
-            const headerCells = [...table.querySelectorAll("thead th")].map(th => this.clean(th)).slice(0, 20);
-            return {
-                index,
-                rows: rows.length,
-                transactionRows: transactionRows.length,
-                maxCells: rowInfo.reduce((max, row) => Math.max(max, row.cells), 0),
-                headers: headerCells,
-                sample: rowInfo.slice(0, 5)
-            };
-        });
-
-        const selectedIndex = candidates.findIndex(c => c.transactionRows > 0);
-
-        const bodyHtmlLength = doc.body ? doc.body.innerHTML.length : 0;
-        const rowLikeCandidates = [...doc.querySelectorAll('[role="row"], tr')].slice(0, 50).map(el => ({
-            tag: el.tagName,
-            cells: el.children ? el.children.length : 0,
-            text: this.clean(el).slice(0, 180)
-        }));
-
-        return {
-            tableCount: tables.length,
-            bodyHtmlLength,
-            bodyTextSample: bodyText,
-            candidates,
-            rowLikeCount: doc.querySelectorAll('[role="row"], tr').length,
-            rowLikeSamples: rowLikeCandidates.slice(0, 10),
-            selectedTableIndex: selectedIndex >= 0 ? selectedIndex : null,
-            selectedTable: selectedIndex >= 0 ? tables[selectedIndex] : null
-        };
-    }
+    // ==================================================
+    // FIND TRANSACTION TABLE
+    // ==================================================
 
     findTransactionTable(doc) {
-        const tables = [...doc.querySelectorAll("table")];
-        return tables.find(table =>
-            [...table.querySelectorAll("tbody tr")].some(tr => this.isTransactionRow(tr))
-        ) || null;
-    }
 
-    isTransactionRow(tr) {
-        const td = [...tr.querySelectorAll("td")];
-        if (td.length < 5) return false;
+        const tables =
+            [
+                ...doc.querySelectorAll(
+                    "table"
+                )
+            ];
 
-        const text = this.clean(tr);
-        const hasDate = /\b\d{1,2}-\d{1,2}-\d{4}\b/.test(text);
-        const hasDocument = /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice|inter account transfer)\b/i.test(text);
-        const hasEditView = /\bEdit\b/i.test(text) && /\bView\b/i.test(text);
-        const hasMoney = td.some(cell => this.isMoneyLikeText(this.clean(cell)));
 
-        // Manager currently also returns a 5-cell summary-transactions row.
-        // That layout can omit the date/document text from the visible row,
-        // so the old "date + document/Edit/View" gate rejected real ledger rows.
-        if (td.length === 5 && hasMoney) return true;
+        for (
+            const table
+            of tables
+        ) {
 
-        return hasDate && (hasDocument || hasEditView);
-    }
+            const rows =
+                [
+                    ...table.querySelectorAll(
+                        "tbody tr"
+                    )
+                ];
 
-    extractTransactions(table) {
-        const transactions = [];
-        const rows = table.querySelectorAll("tbody tr");
 
-        rows.forEach(tr => {
-            const td = [...tr.querySelectorAll("td")];
-            if (!this.isTransactionRow(tr)) return;
+            const hasTransactionRows =
+                rows.some(
+                    tr => {
 
-            let date = "";
-            let documentText = "";
-            let contact = "";
-            let description = "";
-            let amountText = "";
-            let balanceText = "";
-            let editUrl = "";
-            let viewUrl = "";
+                        const td =
+                            tr.querySelectorAll(
+                                "td"
+                            );
 
-            const links = [...tr.querySelectorAll("a")];
-            editUrl = links.find(a => this.clean(a).toLowerCase() === "edit")?.href || "";
-            viewUrl = links.find(a => this.clean(a).toLowerCase() === "view")?.href || "";
 
-            if (td.length === 5) {
-                // Current Manager summary-transactions layout. The visible
-                // row may contain no date/document label, so locate those
-                // fields heuristically and use the last money-bearing cell
-                // as the transaction amount.
-                const cells = td.map(cell => this.clean(cell));
-                const dateCell = cells.find(value =>
-                    /^\d{1,2}-\d{1,2}-\d{4}$/.test(value)
-                );
-                date = dateCell || "";
+                        return td.length >= 12;
 
-                const documentCell = cells.find(value =>
-                    /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice|inter account transfer)\b/i.test(value)
-                );
-                documentText = documentCell || "";
-
-                const moneyIndexes = cells
-                    .map((value, index) => ({ value, index }))
-                    .filter(item => this.isMoneyLikeText(item.value));
-
-                if (moneyIndexes.length) {
-                    const amountCell = moneyIndexes[moneyIndexes.length - 1];
-                    amountText = amountCell.value;
-
-                    // The cell immediately before the amount is normally the
-                    // account/contact cell in the 5-column Manager layout.
-                    if (amountCell.index > 0) {
-                        contact = cells[amountCell.index - 1];
                     }
-                }
+                );
 
-                if (!contact) {
-                    contact = cells.find(value =>
-                        value && value !== date && value !== documentText && !this.isMoneyLikeText(value)
-                    ) || "";
-                }
-            } else if (td.length === 6) {
-                // Compact Manager transaction layout:
-                // Edit | View | Date | Transaction | Account | Amount
-                date = this.clean(td[2]);
-                documentText = this.clean(td[3]);
-                contact = this.clean(td[4]);
-                amountText = this.clean(td[5]);
-            } else if (td.length >= 12) {
-                // Established detailed Manager layout:
-                // Edit, View, Date, Document, Contact, currency/amount columns,
-                // Description, ..., Amount, ..., Balance.
-                date = this.clean(td[2]);
-                documentText = this.clean(td[3]);
-                contact = this.clean(td[4]);
-                description = this.clean(td[6]);
-                amountText = this.clean(td[9]);
-                balanceText = this.clean(td[11]);
-            } else {
-                // Fallback for future Manager variants: use the last cell as amount.
-                date = this.clean(td[2]);
-                documentText = this.clean(td[3]);
-                contact = this.clean(td[4]);
-                amountText = this.clean(td[td.length - 1]);
+
+            if (
+                hasTransactionRows
+            ) {
+
+                return table;
+
             }
 
-            const document = this.parseDocument(documentText);
+        }
 
-            transactions.push({
-                date,
-                documentType: document.type,
-                documentNumber: document.number,
-                description,
-                contact,
-                amount: this.parseAmount(amountText),
-                balance: this.parseBalance(balanceText),
-                editUrl,
-                viewUrl
-            });
-        });
+
+        return null;
+    }
+
+
+    // ==================================================
+    // EXTRACT TRANSACTIONS
+    // ==================================================
+
+    extractTransactions(
+        table
+    ) {
+
+        const transactions = [];
+
+
+        const rows =
+            table.querySelectorAll(
+                "tbody tr"
+            );
+
+
+        rows.forEach(
+            tr => {
+
+                const td =
+                    [
+                        ...tr.querySelectorAll(
+                            "td"
+                        )
+                    ];
+
+
+                /*
+                 * Manager transaction row
+                 * contains 12 columns.
+                 */
+
+                if (
+                    td.length < 12
+                ) {
+
+                    return;
+
+                }
+
+
+                const rawDate =
+                    this.clean(
+                        td[2]
+                    );
+
+                const date =
+                    this.parseTransactionDate(rawDate) || rawDate;
+
+
+                const documentText =
+                    this.clean(
+                        td[3]
+                    );
+
+
+                const contact =
+                    this.clean(
+                        td[4]
+                    );
+
+
+                const description =
+                    this.clean(
+                        td[6]
+                    );
+
+
+                const amountText =
+                    this.clean(
+                        td[9]
+                    );
+
+
+                const balanceText =
+                    this.clean(
+                        td[11]
+                    );
+
+
+                const document =
+                    this.parseDocument(
+                        documentText
+                    );
+
+
+                transactions.push({
+
+                    date,
+
+                    documentType:
+                        document.type,
+
+                    documentNumber:
+                        document.number,
+
+                    description,
+
+                    contact,
+
+                    amount:
+                        this.parseAmount(
+                            amountText
+                        ),
+
+                    balance:
+                        this.parseBalance(
+                            balanceText
+                        )
+
+                });
+
+            }
+        );
+
 
         return transactions;
     }
 
-    extractFinalBalance(doc, transactionTable) {
-        const footerRows = [...transactionTable.querySelectorAll("tfoot tr")];
-        for (const tr of footerRows) {
-            const result = this.parseBalanceAmount(this.clean(tr));
-            if (result !== null) return result;
+
+    // ==================================================
+    // EXTRACT FINAL ACCOUNT BALANCE
+    // ==================================================
+
+    extractFinalBalance(
+        doc,
+        transactionTable
+    ) {
+
+        /*
+         * ------------------------------------------------
+         * METHOD 1
+         *
+         * Check <tfoot> first.
+         * ------------------------------------------------
+         */
+
+        const footerRows =
+            [
+                ...transactionTable.querySelectorAll(
+                    "tfoot tr"
+                )
+            ];
+
+
+        for (
+            const tr
+            of footerRows
+        ) {
+
+            const text =
+                this.clean(
+                    tr
+                );
+
+
+            const result =
+                this.parseBalanceAmount(
+                    text
+                );
+
+
+            if (
+                result !== null
+            ) {
+
+                return result;
+
+            }
+
         }
 
-        let current = transactionTable;
-        for (let i = 0; i < 10; i++) {
-            current = current.nextElementSibling;
-            if (!current) break;
-            const result = this.findBalanceInElement(current);
-            if (result !== null) return result;
+
+        /*
+         * ------------------------------------------------
+         * METHOD 2
+         *
+         * Search elements immediately after the
+         * transaction table.
+         *
+         * Manager may render the blue total bar
+         * outside the actual table.
+         * ------------------------------------------------
+         */
+
+        let current =
+            transactionTable;
+
+
+        for (
+            let i = 0;
+            i < 10;
+            i++
+        ) {
+
+            current =
+                current.nextElementSibling;
+
+
+            if (!current)
+                break;
+
+
+            const result =
+                this.findBalanceInElement(
+                    current
+                );
+
+
+            if (
+                result !== null
+            ) {
+
+                return result;
+
+            }
+
         }
 
-        let parent = transactionTable.parentElement;
-        for (let level = 0; level < 5 && parent; level++) {
-            const result = this.findBalanceInElement(parent, transactionTable);
-            if (result !== null) return result;
-            parent = parent.parentElement;
+
+        /*
+         * ------------------------------------------------
+         * METHOD 3
+         *
+         * Search the parent container.
+         *
+         * This handles structures where the table
+         * and blue total bar are siblings inside
+         * the same Manager container.
+         * ------------------------------------------------
+         */
+
+        let parent =
+            transactionTable.parentElement;
+
+
+        for (
+            let level = 0;
+            level < 5 && parent;
+            level++
+        ) {
+
+            const result =
+                this.findBalanceInElement(
+                    parent,
+                    transactionTable
+                );
+
+
+            if (
+                result !== null
+            ) {
+
+                return result;
+
+            }
+
+
+            parent =
+                parent.parentElement;
+
         }
 
-        const allElements = [...doc.querySelectorAll("*")];
-        for (const element of allElements) {
-            if (element.closest("tbody tr")) continue;
-            const text = this.clean(element);
-            if (!this.isPureMoneyText(text)) continue;
-            const childMoney = [...element.children].some(child => this.isPureMoneyText(this.clean(child)));
-            if (childMoney) continue;
-            const result = this.parseBalanceAmount(text);
-            if (result !== null) return result;
-        }
+
+        /*
+         * ------------------------------------------------
+         * METHOD 4 REMOVED
+         *
+         * Never scan arbitrary page elements for a bare money
+         * value. Manager pages contain many unrelated numeric
+         * values (transaction count, pagination, totals, etc.),
+         * and this caused values such as 50.00 to be treated as
+         * the account balance.
+         * ------------------------------------------------
+         */
+
+        /*
+         * Nothing found.
+         */
 
         return null;
     }
 
-    findBalanceInElement(element, transactionTable = null) {
-        if (!element) return null;
-        const elements = [element, ...element.querySelectorAll("*")];
 
-        for (const child of elements) {
-            if (transactionTable && (child === transactionTable || transactionTable.contains(child))) continue;
-            if (child.closest("tbody tr")) continue;
+    // ==================================================
+    // FIND BALANCE INSIDE ELEMENT
+    // ==================================================
 
-            const text = this.clean(child);
-            if (!this.isPureMoneyText(text)) continue;
+    findBalanceInElement(
+        element,
+        transactionTable = null
+    ) {
 
-            const hasExactChild = [...child.children].some(nested => this.isPureMoneyText(this.clean(nested)));
-            if (hasExactChild) continue;
+        if (!element)
+            return null;
 
-            const result = this.parseBalanceAmount(text);
-            if (result !== null) return result;
+
+        /*
+         * Search descendants for exact currency text.
+         */
+
+        const elements =
+            [
+                element,
+                ...element.querySelectorAll(
+                    "*"
+                )
+            ];
+
+
+        for (
+            const child
+            of elements
+        ) {
+
+            /*
+             * Never use the transaction table itself.
+             */
+
+            if (
+                transactionTable &&
+                (
+                    child === transactionTable ||
+                    transactionTable.contains(
+                        child
+                    )
+                )
+            ) {
+
+                continue;
+
+            }
+
+
+            /*
+             * Never use transaction rows.
+             */
+
+            if (
+                child.closest(
+                    "tbody tr"
+                )
+            ) {
+
+                continue;
+
+            }
+
+
+            const text =
+                this.clean(
+                    child
+                );
+
+
+            if (
+                !this.isPureMoneyText(
+                    text
+                )
+            ) {
+
+                continue;
+
+            }
+
+
+            /*
+             * Prefer the smallest element
+             * containing the exact amount.
+             */
+
+            const hasExactChild =
+                [
+                    ...child.children
+                ]
+                .some(
+                    nested => {
+
+                        return this.isPureMoneyText(
+                            this.clean(
+                                nested
+                            )
+                        );
+
+                    }
+                );
+
+
+            if (
+                hasExactChild
+            ) {
+
+                continue;
+
+            }
+
+
+            const result =
+                this.parseBalanceAmount(
+                    text
+                );
+
+
+            if (
+                result !== null
+            ) {
+
+                return result;
+
+            }
+
         }
+
+
         return null;
     }
 
 
-    isMoneyLikeText(text) {
-        if (!text) return false;
-        return /(?:AED|SAR|USD|EUR|GBP|[$€£])\s*-?\d[\d,]*(?:\.\d+)?/i.test(text) ||
-            /^-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i.test(text.trim());
+    // ==================================================
+    // CHECK IF TEXT IS ONLY A MONEY VALUE
+    // ==================================================
+
+    isPureMoneyText(
+        text
+    ) {
+
+        if (!text)
+            return false;
+
+
+        /*
+         * Examples accepted:
+         *
+         * AED 25,000.00
+         * SAR 25,000.00
+         * USD 25,000.00
+         * $25,000.00
+         * 25,000.00
+         * AED 25,000.00 Dr
+         */
+
+        const pattern =
+            /^(?:AED|SAR|USD|EUR|GBP|\$|€|£)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i;
+
+
+        return pattern.test(
+            text.trim()
+        );
     }
 
-    isPureMoneyText(text) {
-        if (!text) return false;
-        const pattern = /^(?:AED|SAR|USD|EUR|GBP|\$|€|£)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i;
-        return pattern.test(text.trim());
-    }
 
-    parseBalanceAmount(text) {
-        if (!text || !this.isPureMoneyText(String(text).replace(/\s+/g, " ").trim())) return null;
-        const cleanText = String(text).replace(/\s+/g, " ").trim();
-        const amount = this.parseAmount(cleanText);
-        if (!Number.isFinite(amount)) return null;
+    // ==================================================
+    // PARSE BALANCE AMOUNT
+    // ==================================================
 
-        let side = "";
-        if (/\bDr\b/i.test(cleanText)) side = "debit";
-        else if (/\bCr\b/i.test(cleanText)) side = "credit";
+    parseBalanceAmount(
+        text
+    ) {
 
-        return { value: amount, side };
-    }
+        if (!text)
+            return null;
 
-    parseDocument(text) {
-        if (!text) return { type: "", number: "" };
-        const parts = text.split("—").map(x => x.trim()).filter(Boolean);
-        return { type: parts[0] || "", number: parts[1] || "" };
-    }
 
-    parseTransactionAmount(text) {
-        if (!text) return 0;
+        const cleanText =
+            String(text)
+                .replace(
+                    /\s+/g,
+                    " "
+                )
+                .trim();
 
-        const value = String(text).replace(/,/g, "");
 
-        // Manager may include an exchange-rate/conversion trail in the same
-        // cell, e.g. "AED 105,041.14 Dr SAR 1.00 = AED 0.975 SAR 107,734.50 Dr".
-        // For the selected account we need the transaction's first stated
-        // monetary amount, not every number contained in the conversion text.
-        const match = value.match(/(?:AED|SAR|USD|EUR|GBP|[$€£])\s*(-?\d+(?:\.\d+)?)/i);
-        if (match) {
-            const number = parseFloat(match[1]);
-            return Number.isNaN(number) ? 0 : number;
+        /*
+         * Only accept an element that represents
+         * a money value, rather than arbitrary text.
+         */
+
+        if (
+            !this.isPureMoneyText(
+                cleanText
+            )
+        ) {
+
+            return null;
+
         }
 
-        return this.parseAmount(text);
-    }
 
-    parseAmount(text) {
-        if (!text) return 0;
-        const cleaned = String(text).replace(/,/g, "").replace(/[^\d.-]/g, "");
-        const number = parseFloat(cleaned);
-        return isNaN(number) ? 0 : number;
-    }
+        const amount =
+            this.parseAmount(
+                cleanText
+            );
 
-    parseBalance(text) {
-        if (!text) return { value: 0, side: "" };
+
+        if (
+            !Number.isFinite(
+                amount
+            )
+        ) {
+
+            return null;
+
+        }
+
+
         let side = "";
-        if (/\bDr\b/i.test(text)) side = "debit";
-        else if (/\bCr\b/i.test(text)) side = "credit";
-        return { value: this.parseAmount(text), side };
+
+
+        if (
+            /\bDr\b/i.test(
+                cleanText
+            )
+        ) {
+
+            side =
+                "debit";
+
+        }
+        else if (
+            /\bCr\b/i.test(
+                cleanText
+            )
+        ) {
+
+            side =
+                "credit";
+
+        }
+
+
+        return {
+
+            value:
+                amount,
+
+            side
+
+        };
     }
 
-    clean(element) {
-        if (!element) return "";
-        return (element.innerText || element.textContent || "")
-            .replace(/\s+/g, " ")
+
+    // ==================================================
+    // NORMALIZE / PARSE TRANSACTION DATE
+    // ==================================================
+
+    parseTransactionDate(value) {
+        if (!value) return null;
+
+        const text = String(value).replace(/\s+/g, " ").trim();
+        if (!text || text === "-") return null;
+
+        let m = text.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+        if (m) {
+            const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+            return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+        }
+
+        m = text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+
+        const parsed = Date.parse(text);
+        return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0,10);
+    }
+
+
+    // ==================================================
+    // PARSE DOCUMENT
+    // ==================================================
+
+    parseDocument(
+        text
+    ) {
+
+        if (!text) {
+
+            return {
+
+                type: "",
+
+                number: ""
+
+            };
+
+        }
+
+
+        const parts =
+            text
+                .split("—")
+                .map(
+                    x => x.trim()
+                )
+                .filter(
+                    Boolean
+                );
+
+
+        return {
+
+            type:
+                parts[0] || "",
+
+            number:
+                parts[1] || ""
+
+        };
+    }
+
+
+    // ==================================================
+    // PARSE AMOUNT
+    // ==================================================
+
+    parseAmount(
+        text
+    ) {
+
+        if (!text)
+            return 0;
+
+
+        const cleaned =
+            String(text)
+                .replace(
+                    /,/g,
+                    ""
+                )
+                .replace(
+                    /[^\d.-]/g,
+                    ""
+                );
+
+
+        const number =
+            parseFloat(
+                cleaned
+            );
+
+
+        return isNaN(
+            number
+        )
+            ? 0
+            : number;
+    }
+
+
+    // ==================================================
+    // PARSE RUNNING BALANCE
+    // ==================================================
+
+    parseBalance(
+        text
+    ) {
+
+        if (!text) {
+
+            return {
+
+                value: 0,
+
+                side: ""
+
+            };
+
+        }
+
+
+        let side = "";
+
+
+        if (
+            /\bDr\b/i.test(
+                text
+            )
+        ) {
+
+            side =
+                "debit";
+
+        }
+        else if (
+            /\bCr\b/i.test(
+                text
+            )
+        ) {
+
+            side =
+                "credit";
+
+        }
+
+
+        return {
+
+            value:
+                this.parseAmount(
+                    text
+                ),
+
+            side
+
+        };
+    }
+
+
+    // ==================================================
+    // CLEAN DOM TEXT
+    // ==================================================
+
+    clean(
+        element
+    ) {
+
+        if (!element)
+            return "";
+
+
+        return (
+            element.innerText ||
+            element.textContent ||
+            ""
+        )
+            .replace(
+                /\s+/g,
+                " "
+            )
             .trim();
     }
+
 }
 
-const extractor = new EntryExtractor();
 
+// ======================================================
+// GLOBAL EXTRACTOR INSTANCE
+// ======================================================
 
-
+const extractor =
+    new EntryExtractor();
