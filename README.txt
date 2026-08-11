@@ -1,20 +1,28 @@
-Manager AI - V6 Duplicate Audit Fix (2026-08-11)
+Manager AI — V9 AI Audit Layer
 
-This package includes the previous V4 balance fix plus a duplicate-audit cleanup.
+This build keeps the existing Manager transaction extraction and deterministic
+rules, but adds a final AI review layer.
 
-V4 balance fix:
-- Never treat an arbitrary transaction amount as the account running balance.
-- If Manager does not expose a usable running balance, show "No transaction balance was available for comparison."
-- Keep transaction extraction and account audit rules active.
+Flow:
+Manager.io -> transaction extraction -> technical audit signals -> FULL ledger + signals -> AI -> final findings
 
-V6 duplicate fix:
-- Exact duplicate groups are consolidated into ONE audit finding instead of one card per group.
-- The finding reports the number of duplicate groups and affected transactions.
-- Evidence is grouped so each matching set can still be reviewed.
-- The duplicate signature uses normalized date, document type, document number, amount and description.
-- Cache-busting versions were updated for the modified audit scripts.
+Important:
+- The AI receives the complete normalized transaction ledger.
+- Debit/credit side is now explicitly extracted from transaction amounts.
+- Matching debit/credit entries are not automatically treated as duplicates.
+- The deterministic audit rules are signals only; the AI decides which findings
+  are confirmed and which are false positives.
+- If AI is unavailable, the technical signals remain visible.
 
-Replace the current package with these files as a complete package; no manual merge is required.
+AI endpoint:
+POST /api/ai-audit
 
+Required server environment variable:
+OPENAI_API_KEY
 
-V8 changes (2026-08-11): tightened low-value transaction alert criteria and added compact evidence/type summaries for unexpected document-type findings.
+Optional:
+OPENAI_MODEL=gpt-5
+
+Deploy the project to a platform supporting the /api directory (for example
+Vercel), set OPENAI_API_KEY in the server environment, and keep the API key
+out of all browser-side files.

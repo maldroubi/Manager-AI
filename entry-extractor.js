@@ -150,6 +150,7 @@ class EntryExtractor {
                 description,
                 contact: "",
                 amount: this.parseAmount(amountText),
+                side: this.parseSide(amountText),
                 balance: {
                     value: 0,
                     side: ""
@@ -765,6 +766,20 @@ class EntryExtractor {
         )
             ? 0
             : number;
+    }
+
+
+    // ==================================================
+    // PARSE TRANSACTION SIDE
+    // ==================================================
+
+    parseSide(text) {
+        if (!text) return "";
+
+        if (/\bDr\b/i.test(String(text))) return "debit";
+        if (/\bCr\b/i.test(String(text))) return "credit";
+
+        return "";
     }
 
 

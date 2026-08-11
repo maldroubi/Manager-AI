@@ -581,7 +581,36 @@ async function start() {
 
                         analysis.innerHTML =
                             renderBalanceCheck(balanceCheck) +
-                            audit.render(findings);
+                            `<div id="ai-audit-result"><p>AI is reviewing the full transaction ledger...</p></div>` +
+                            `<details style="margin:0 0 16px 0;">
+                                <summary><strong>Technical audit signals</strong> (${findings.length})</summary>
+                                <div style="margin-top:10px;">${audit.render(findings)}</div>
+                            </details>`;
+
+                        const aiBox = document.getElementById("ai-audit-result");
+
+                        try {
+                            const aiResult = await aiAudit.analyze(
+                                account,
+                                findings,
+                                balanceCheck
+                            );
+
+                            aiBox.innerHTML = aiAudit.render(aiResult);
+                            console.groupCollapsed("[Manager AI] Final AI audit");
+                            console.log("AI result:", aiResult);
+                            console.log("Rule signals:", findings);
+                            console.groupEnd();
+                        } catch (aiError) {
+                            console.error("[Manager AI] AI audit failed", aiError);
+                            aiBox.innerHTML = `
+                                <div style="margin-bottom:16px;padding:14px;border:1px solid #f0c36d;border-radius:6px;">
+                                    <strong>AI analysis unavailable</strong>
+                                    <p style="margin:6px 0 0;">${String(aiError.message || aiError)}</p>
+                                    <p style="margin:6px 0 0;">The technical audit signals below are retained for manual review.</p>
+                                </div>
+                            `;
+                        }
 
 
                         /*
