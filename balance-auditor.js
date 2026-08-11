@@ -347,13 +347,78 @@ class BalanceAuditor {
             .map(([type, count]) => `${type} (${count})`)
             .join(", ");
 
+        // A transfer document posted directly to a receivable/payable account
+        // is materially more concerning than a generic unexpected document.
+        // In Manager, an Inter Account Transfer is normally associated with
+        // movement between cash/bank accounts. Treat a repeated occurrence on
+        // a receivable/payable account as a high-priority classification signal.
+        const transferTypeOnly = [...typeCounts.keys()].length === 1 &&
+            /^inter\s+account\s+transfer$/i.test([...typeCounts.keys()][0]);
+        const highPriority = transferTypeOnly &&
+            (category === "receivable" || category === "payable") &&
+            unexpected.length >= 2;
+
+        // Detect overlap with the duplicate rule so the reviewer understands
+        // when the same entries are triggering two independent audit signals.
+        const duplicateKeys = new Set();
+        const normalize = (value) => String(value ?? "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .toLowerCase();
+        for (const t of transactions) {
+            const key = [
+                normalize(t.date),
+                normalize(t.documentType),
+                normalize(t.documentNumber),
+                this.amount(t).toFixed(2),
+                normalize(t.description)
+            ].join("|");
+            if (!duplicateKeys.has(key)) {
+                duplicateKeys.add(key);
+            }
+        }
+
+        const duplicateGroupKeys = new Map();
+        for (const t of transactions) {
+            const key = [
+                normalize(t.date),
+                normalize(t.documentType),
+                normalize(t.documentNumber),
+                this.amount(t).toFixed(2),
+                normalize(t.description)
+            ].join("|");
+            duplicateGroupKeys.set(key, (duplicateGroupKeys.get(key) || 0) + 1);
+        }
+        const overlappingUnexpected = unexpected.filter(t => {
+            const key = [
+                normalize(t.date),
+                normalize(t.documentType),
+                normalize(t.documentNumber),
+                this.amount(t).toFixed(2),
+                normalize(t.description)
+            ].join("|");
+            return (duplicateGroupKeys.get(key) || 0) >= 2;
+        }).length;
+
+        let description = `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account. Detected types: ${typeSummary}.`;
+
+        if (highPriority) {
+            description += ` All ${unexpected.length} unexpected entries are Inter Account Transfer postings on this ${category} account, which is a strong account-classification review signal.`;
+        }
+
+        if (overlappingUnexpected > 0) {
+            description += ` ${overlappingUnexpected} of these entries also belong to duplicate transaction groups, so the two findings may relate to the same underlying postings.`;
+        }
+
         findings.push(this.finding(
-            "medium",
+            highPriority ? "high" : "medium",
             "UNEXPECTED_DOCUMENT_TYPES",
-            "Unexpected document type activity",
-            `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account. Detected types: ${typeSummary}.`,
-            "Review the highlighted entries and confirm that the document type and account classification are appropriate. This is a review signal, not proof of an error.",
-            0.71,
+            highPriority ? "Inter-account transfers posted to a receivable/payable account" : "Unexpected document type activity",
+            description,
+            highPriority
+                ? "Review these Inter Account Transfer postings first. Confirm why they are posted to the receivable/payable account and whether they should instead be recorded in a cash, bank, clearing, or other appropriate account. Also review the duplicate groups before making corrections."
+                : "Review the highlighted entries and confirm that the document type and account classification are appropriate. This is a review signal, not proof of an error.",
+            highPriority ? 0.88 : 0.71,
             unexpected.slice(0, 8)
         ));
     }
