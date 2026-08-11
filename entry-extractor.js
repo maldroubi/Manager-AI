@@ -98,18 +98,19 @@ class EntryExtractor {
 
     isTransactionRow(tr) {
         const td = [...tr.querySelectorAll("td")];
-        // Manager uses two transaction-table layouts:
-        //   1) compact ledger: Edit, View, Date, Transaction, Account, Amount (6 cells)
-        //   2) detailed ledger: 12+ cells with contact/description/balance columns.
-        if (td.length < 6) return false;
+        if (td.length < 5) return false;
 
         const text = this.clean(tr);
         const hasDate = /\b\d{1,2}-\d{1,2}-\d{4}\b/.test(text);
         const hasDocument = /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice|inter account transfer)\b/i.test(text);
         const hasEditView = /\bEdit\b/i.test(text) && /\bView\b/i.test(text);
+        const hasMoney = td.some(cell => this.isMoneyLikeText(this.clean(cell)));
 
-        // Require a date plus either a known transaction/document label or
-        // the Edit/View pair used by the current Manager transaction table.
+        // Manager currently also returns a 5-cell summary-transactions row.
+        // That layout can omit the date/document text from the visible row,
+        // so the old "date + document/Edit/View" gate rejected real ledger rows.
+        if (td.length === 5 && hasMoney) return true;
+
         return hasDate && (hasDocument || hasEditView);
     }
 
@@ -134,8 +135,44 @@ class EntryExtractor {
             editUrl = links.find(a => this.clean(a).toLowerCase() === "edit")?.href || "";
             viewUrl = links.find(a => this.clean(a).toLowerCase() === "view")?.href || "";
 
-            if (td.length === 6) {
-                // Current compact Manager transaction layout:
+            if (td.length === 5) {
+                // Current Manager summary-transactions layout. The visible
+                // row may contain no date/document label, so locate those
+                // fields heuristically and use the last money-bearing cell
+                // as the transaction amount.
+                const cells = td.map(cell => this.clean(cell));
+                const dateCell = cells.find(value =>
+                    /^\d{1,2}-\d{1,2}-\d{4}$/.test(value)
+                );
+                date = dateCell || "";
+
+                const documentCell = cells.find(value =>
+                    /\b(?:sales invoice|purchase invoice|receipt|payment|journal|credit note|debit note|invoice|inter account transfer)\b/i.test(value)
+                );
+                documentText = documentCell || "";
+
+                const moneyIndexes = cells
+                    .map((value, index) => ({ value, index }))
+                    .filter(item => this.isMoneyLikeText(item.value));
+
+                if (moneyIndexes.length) {
+                    const amountCell = moneyIndexes[moneyIndexes.length - 1];
+                    amountText = amountCell.value;
+
+                    // The cell immediately before the amount is normally the
+                    // account/contact cell in the 5-column Manager layout.
+                    if (amountCell.index > 0) {
+                        contact = cells[amountCell.index - 1];
+                    }
+                }
+
+                if (!contact) {
+                    contact = cells.find(value =>
+                        value && value !== date && value !== documentText && !this.isMoneyLikeText(value)
+                    ) || "";
+                }
+            } else if (td.length === 6) {
+                // Compact Manager transaction layout:
                 // Edit | View | Date | Transaction | Account | Amount
                 date = this.clean(td[2]);
                 documentText = this.clean(td[3]);
@@ -233,6 +270,13 @@ class EntryExtractor {
         return null;
     }
 
+
+    isMoneyLikeText(text) {
+        if (!text) return false;
+        return /(?:AED|SAR|USD|EUR|GBP|[$€£])\s*-?\d[\d,]*(?:\.\d+)?/i.test(text) ||
+            /^-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i.test(text.trim());
+    }
+
     isPureMoneyText(text) {
         if (!text) return false;
         const pattern = /^(?:AED|SAR|USD|EUR|GBP|\$|€|£)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i;
@@ -256,6 +300,24 @@ class EntryExtractor {
         if (!text) return { type: "", number: "" };
         const parts = text.split("—").map(x => x.trim()).filter(Boolean);
         return { type: parts[0] || "", number: parts[1] || "" };
+    }
+
+    parseTransactionAmount(text) {
+        if (!text) return 0;
+
+        const value = String(text).replace(/,/g, "");
+
+        // Manager may include an exchange-rate/conversion trail in the same
+        // cell, e.g. "AED 105,041.14 Dr SAR 1.00 = AED 0.975 SAR 107,734.50 Dr".
+        // For the selected account we need the transaction's first stated
+        // monetary amount, not every number contained in the conversion text.
+        const match = value.match(/(?:AED|SAR|USD|EUR|GBP|[$€£])\s*(-?\d+(?:\.\d+)?)/i);
+        if (match) {
+            const number = parseFloat(match[1]);
+            return Number.isNaN(number) ? 0 : number;
+        }
+
+        return this.parseAmount(text);
     }
 
     parseAmount(text) {
