@@ -126,6 +126,20 @@ class AuditEngine {
             return `<div style="margin:0 0 10px 0;font-size:12px;"><strong>Matching groups:</strong>${groups}</div>`;
         }
 
+        // Generic transaction evidence (for document-type, movement and
+        // similar findings). Keep it compact so the audit card remains usable.
+        if (evidence[0] && typeof evidence[0] === "object") {
+            const rows = evidence.slice(0, 8).map(t => {
+                const date = this.escape(t.date || "");
+                const amount = this.escape(t.amount?.display ?? t.amount?.value ?? t.amount ?? "");
+                const type = this.escape(t.documentType || "");
+                const number = this.escape(t.documentNumber || "");
+                const desc = this.escape(t.description || "");
+                return `<div style="padding:4px 0;">${date} · ${amount}${type ? ` · ${type}` : ""}${number ? ` · ${number}` : ""}${desc ? ` · ${desc}` : ""}</div>`;
+            }).join("");
+            return `<div style="margin:0 0 10px 0;font-size:12px;"><strong>Evidence:</strong><div style="margin-top:4px;padding:8px 10px;background:#fafafa;border-radius:4px;">${rows}</div></div>`;
+        }
+
         return "";
     }
 

@@ -286,17 +286,18 @@ class BalanceAuditor {
             return amount > 0 && amount <= max * 0.01;
         });
 
-        if (tiny.length < 10 || tiny.length / transactions.length < 0.5) return;
+        // This rule is intended for genuine fragmentation/noise, not for an
+        // account that simply has many smaller operational postings. Require
+        // both a high population share and a meaningful share of total value.
+        if (tiny.length < 15 || tiny.length / transactions.length < 0.70) return;
 
         const totalValue = amounts.reduce((sum, value) => sum + value, 0);
         const tinyValue = tiny.reduce((sum, t) => sum + this.amount(t), 0);
         const tinyValueRatio = totalValue > 0 ? tinyValue / totalValue : 0;
 
-        // Only flag the pattern when the many small entries also represent a
-        // very small share of the account's total transaction value. This
-        // avoids calling a normal population of smaller transactions
-        // suspicious merely because one unusually large entry exists.
-        if (tinyValueRatio > 0.02) return;
+        // A tiny-value population representing only a negligible portion of
+        // total activity is not useful as an audit alert.
+        if (tinyValueRatio < 0.05) return;
 
         findings.push(this.finding(
             "low",
@@ -335,11 +336,22 @@ class BalanceAuditor {
         const ratio = unexpected.length / transactions.length;
         if (ratio < 0.34 && unexpected.length < 3) return;
 
+        const typeCounts = new Map();
+        for (const t of unexpected) {
+            const type = String(t.documentType || "").trim() || "(blank)";
+            typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+        }
+
+        const typeSummary = [...typeCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => `${type} (${count})`)
+            .join(", ");
+
         findings.push(this.finding(
             "medium",
             "UNEXPECTED_DOCUMENT_TYPES",
             "Unexpected document type activity",
-            `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account.`,
+            `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account. Detected types: ${typeSummary}.`,
             "Review the highlighted entries and confirm that the document type and account classification are appropriate. This is a review signal, not proof of an error.",
             0.71,
             unexpected.slice(0, 8)

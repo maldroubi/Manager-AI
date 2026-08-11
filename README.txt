@@ -15,3 +15,6 @@ V6 duplicate fix:
 - Cache-busting versions were updated for the modified audit scripts.
 
 Replace the current package with these files as a complete package; no manual merge is required.
+
+
+V7 changes (2026-08-11): tightened low-value transaction alert criteria and added compact evidence/type summaries for unexpected document-type findings.
