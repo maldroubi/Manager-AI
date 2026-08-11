@@ -1,19 +1,17 @@
-Manager AI - V3 Balance Check Fix
+Manager AI - V5 Duplicate Audit Fix (2026-08-11)
 
-Replace these two files in the current Manager AI project:
-1. entry-extractor.js
-2. script.js
+This package includes the previous V4 balance fix plus a duplicate-audit cleanup.
 
-Do NOT replace index.html.
+V4 balance fix:
+- Never treat an arbitrary transaction amount as the account running balance.
+- If Manager does not expose a usable running balance, show "No transaction balance was available for comparison."
+- Keep transaction extraction and account audit rules active.
 
-Main fix:
-- Never treat an arbitrary number such as 50.00 as the account running balance.
-- A balance comparison is only performed when a dated transaction has a valid balance.
-- If Manager does not expose a usable running balance, the report says it is unavailable instead of producing a false Balance Difference.
-- The extractor no longer scans the entire document for a bare money value.
-- Transaction dates are normalized for common DD-MM-YYYY / DD/MM/YYYY / YYYY-MM-DD formats.
+V5 duplicate fix:
+- Exact duplicate groups are consolidated into ONE audit finding instead of one card per group.
+- The finding reports the number of duplicate groups and affected transactions.
+- Evidence is grouped so each matching set can still be reviewed.
+- The duplicate signature uses normalized date, document type, document number, amount and description.
+- Cache-busting versions were updated for the modified audit scripts.
 
-V4 HOTFIX (2026-08-11)
-- Fixed false Balance Difference warnings on Manager transaction pages that have transaction amounts but no running-balance column.
-- The extractor already marks these rows as balanceAvailable:false; the UI now respects that flag and shows "No transaction balance was available for comparison" instead of comparing against a fabricated 0.00 balance.
-- Transaction extraction and duplicate/repeated-amount audit rules remain unchanged.
+Replace the current package with these files as a complete package; no manual merge is required.

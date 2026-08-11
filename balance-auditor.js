@@ -175,33 +175,59 @@ class BalanceAuditor {
         if (transactions.length < 2) return;
 
         const groups = new Map();
+
+        const normalize = (value) => String(value ?? "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .toLowerCase();
+
         for (const t of transactions) {
             const key = [
-                String(t.date || "").trim(),
-                String(t.documentType || "").trim().toLowerCase(),
-                String(t.documentNumber || "").trim().toLowerCase(),
+                normalize(t.date),
+                normalize(t.documentType),
+                normalize(t.documentNumber),
                 this.amount(t).toFixed(2),
-                String(t.description || "").trim().toLowerCase()
+                normalize(t.description)
             ].join("|");
 
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(t);
         }
 
-        for (const [key, group] of groups) {
-            if (group.length < 2) continue;
+        const duplicateGroups = [...groups.values()]
+            .filter(group => group.length >= 2);
 
-            const hasDocumentNumber = group.some(t => String(t.documentNumber || "").trim() !== "");
-            findings.push(this.finding(
-                hasDocumentNumber ? "high" : "medium",
-                "DUPLICATE_TRANSACTIONS",
-                "Potential duplicate transactions detected",
-                `${group.length} transactions have the same date, amount, description and document details.`,
-                "Open the matching transactions and confirm that each posting represents a separate accounting event.",
-                hasDocumentNumber ? 0.91 : 0.76,
-                group.slice(0, 5)
-            ));
-        }
+        if (!duplicateGroups.length) return;
+
+        const duplicateTransactionCount = duplicateGroups
+            .reduce((total, group) => total + group.length, 0);
+
+        const groupsWithDocumentNumber = duplicateGroups.filter(group =>
+            group.some(t => String(t.documentNumber || "").trim() !== "")
+        );
+
+        const severity = groupsWithDocumentNumber.length > 0 ? "high" : "medium";
+        const confidence = groupsWithDocumentNumber.length > 0 ? 0.91 : 0.76;
+
+        // Keep all duplicate groups in one finding. The previous implementation
+        // rendered one card per group, which made the audit page look as if the
+        // same problem had been detected repeatedly. Evidence remains grouped
+        // so the reviewer can still inspect each matching set.
+        const evidence = duplicateGroups.map((group, index) => ({
+            group: index + 1,
+            count: group.length,
+            transactions: group.slice(0, 10)
+        }));
+
+        findings.push(this.finding(
+            severity,
+            "DUPLICATE_TRANSACTIONS",
+            "Potential duplicate transactions detected",
+            `${duplicateGroups.length} duplicate group${duplicateGroups.length === 1 ? "" : "s"} involving ${duplicateTransactionCount} transactions have identical date, amount, description and document details.`,
+            "Review each duplicate group below and confirm whether the repeated postings represent separate accounting events or duplicate/template-based entries.",
+            confidence,
+            evidence
+        ));
     }
 
     checkRepeatedAmounts(transactions, findings) {

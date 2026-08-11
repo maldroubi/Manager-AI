@@ -78,6 +78,8 @@ class AuditEngine {
 
         const label = severity.toUpperCase();
 
+        const evidenceHtml = this.renderEvidence(finding.evidence);
+
         return `
             <div style="margin-bottom:12px;padding:14px;border:1px solid ${border};border-radius:6px;">
                 <div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:${border};margin-bottom:6px;">
@@ -85,9 +87,46 @@ class AuditEngine {
                 </div>
                 <h4 style="margin:0 0 8px 0;">${title}</h4>
                 <p style="margin:0 0 8px 0;">${description}</p>
+                ${evidenceHtml}
                 <p style="margin:0;"><strong>Recommended review:</strong> ${recommendation}</p>
             </div>
         `;
+    }
+
+    renderEvidence(evidence) {
+        if (!Array.isArray(evidence) || evidence.length === 0) return "";
+
+        // Duplicate findings use grouped evidence: [{group, count, transactions}].
+        if (evidence[0] && Array.isArray(evidence[0].transactions)) {
+            const groups = evidence.map(item => {
+                const rows = Array.isArray(item.transactions) ? item.transactions : [];
+                const preview = rows.slice(0, 3).map(t => {
+                    const date = this.escape(t.date || "");
+                    const amount = this.escape(
+                        t.amount?.display ??
+                        t.amount?.value ??
+                        t.amount ??
+                        ""
+                    );
+                    const doc = this.escape(t.documentNumber || t.documentType || "");
+                    const desc = this.escape(t.description || "");
+                    return `<div style="padding:4px 0;">${date} · ${amount}${doc ? ` · ${doc}` : ""}${desc ? ` · ${desc}` : ""}</div>`;
+                }).join("");
+
+                const more = rows.length > 3
+                    ? `<div style="padding-top:2px;opacity:.7;">+ ${rows.length - 3} more in this group</div>`
+                    : "";
+
+                return `<div style="margin:6px 0;padding:8px 10px;background:#fafafa;border-radius:4px;">
+                    <strong>Duplicate group ${this.escape(item.group)} (${this.escape(item.count)} transactions)</strong>
+                    <div style="font-size:12px;margin-top:4px;">${preview}${more}</div>
+                </div>`;
+            }).join("");
+
+            return `<div style="margin:0 0 10px 0;font-size:12px;"><strong>Matching groups:</strong>${groups}</div>`;
+        }
+
+        return "";
     }
 
     escape(value) {
