@@ -87,6 +87,23 @@ function checkBalance(account) {
         };
     }
 
+    // Some Manager transaction pages expose transaction amounts but do NOT
+    // expose a running-balance column. The extractor marks those rows with
+    // balanceAvailable:false and a placeholder balance of 0. Never compare
+    // that placeholder with the Balance Sheet balance.
+    if (latestTransaction.balanceAvailable === false ||
+        latestTransaction.balance === null ||
+        latestTransaction.balance === undefined) {
+        return {
+            available: false,
+            balanceSheetBalance,
+            transactionBalance: null,
+            difference: null,
+            matches: null,
+            transaction: latestTransaction
+        };
+    }
+
     const transactionBalance =
         parseSignedBalance(latestTransaction.balance);
 
