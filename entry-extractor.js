@@ -74,12 +74,12 @@ class EntryExtractor {
                 const text = cells.map(td => this.clean(td)).join(" | ");
 
                 const hasDate = cells.some(td =>
-                    /^\\d{1,2}-\\d{1,2}-\\d{4}$/.test(this.clean(td))
+                    /^\d{1,2}-\d{1,2}-\d{4}$/.test(this.clean(td))
                 );
 
                 const hasMoney = cells.some(td =>
-                    /(?:AED|SAR|USD|\\$|Dr\\b|Cr\\b)/i.test(this.clean(td)) &&
-                    /\\d/.test(this.clean(td))
+                    /(?:AED|SAR|USD|\$|Dr\b|Cr\b)/i.test(this.clean(td)) &&
+                    /\d/.test(this.clean(td))
                 );
 
                 // Manager's summary-transactions page currently renders
@@ -88,7 +88,7 @@ class EntryExtractor {
                 // Cash & cash equivalents | AED 2,524.86 Cr
                 if (hasDate && hasMoney) {
                     score += 3;
-                } else if (cells.length >= 5 && /\\d{1,2}-\\d{1,2}-\\d{4}/.test(text)) {
+                } else if (cells.length >= 5 && /\d{1,2}-\d{1,2}-\d{4}/.test(text)) {
                     score += 1;
                 }
             }
@@ -118,7 +118,7 @@ class EntryExtractor {
 
             const values = td.map(cell => this.clean(cell));
             const dateIndex = values.findIndex(value =>
-                /^\\d{1,2}-\\d{1,2}-\\d{4}$/.test(value)
+                /^\d{1,2}-\d{1,2}-\d{4}$/.test(value)
             );
 
             if (dateIndex < 0) return;
@@ -126,7 +126,7 @@ class EntryExtractor {
             const date = values[dateIndex];
             const amountIndex = (() => {
                 for (let i = values.length - 1; i > dateIndex; i--) {
-                    if (/(?:AED|SAR|USD|\\$|Dr\\b|Cr\\b)/i.test(values[i]) && /\\d/.test(values[i])) {
+                    if (/(?:AED|SAR|USD|\$|Dr\b|Cr\b)/i.test(values[i]) && /\d/.test(values[i])) {
                         return i;
                     }
                 }
