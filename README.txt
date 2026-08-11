@@ -1,4 +1,4 @@
-Manager AI - V5 Duplicate Audit Fix (2026-08-11)
+Manager AI - V6 Duplicate Audit Fix (2026-08-11)
 
 This package includes the previous V4 balance fix plus a duplicate-audit cleanup.
 
@@ -7,7 +7,7 @@ V4 balance fix:
 - If Manager does not expose a usable running balance, show "No transaction balance was available for comparison."
 - Keep transaction extraction and account audit rules active.
 
-V5 duplicate fix:
+V6 duplicate fix:
 - Exact duplicate groups are consolidated into ONE audit finding instead of one card per group.
 - The finding reports the number of duplicate groups and affected transactions.
 - Evidence is grouped so each matching set can still be reviewed.

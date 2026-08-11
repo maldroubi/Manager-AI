@@ -242,20 +242,32 @@ class BalanceAuditor {
             groups.get(key).push(t);
         }
 
+        const amounts = transactions.map(t => this.amount(t)).filter(a => a > 0);
+        if (!amounts.length) return;
+
+        const maxAmount = Math.max(...amounts);
+
+        // A repeated amount is only interesting when it is materially large
+        // for this account. Small recurring amounts (for example AED 1,000)
+        // are usually normal operational activity and otherwise create noisy
+        // audit findings.
         const repeated = [...groups.entries()]
-            .filter(([, group]) => group.length >= 3)
+            .filter(([, group]) => group.length >= 4)
+            .filter(([amount]) => Number(amount) >= maxAmount * 0.05)
             .sort((a, b) => b[1].length - a[1].length)
             .slice(0, 3);
 
         for (const [amount, group] of repeated) {
+            const distinctDates = new Set(group.map(t => String(t.date || '').trim()).filter(Boolean)).size;
+
             findings.push(this.finding(
                 "low",
                 "REPEATED_UNUSUAL_AMOUNT",
-                "Repeated transaction amount",
-                `The amount ${this.money(Number(amount))} appears ${group.length} times in this account. Repeated identical amounts can be legitimate, but the pattern deserves review when it is unexpected for the account.`,
-                "Confirm that the repeated amount represents genuine recurring transactions and is not caused by duplicate or template-based postings.",
-                0.68,
-                group.slice(0, 5)
+                "Repeated material transaction amount",
+                `The amount ${this.money(Number(amount))} appears ${group.length} times across ${distinctDates || group.length} transaction date${(distinctDates || group.length) === 1 ? "" : "s"}. Because this amount is material relative to the account's largest transaction, the repetition deserves review.`,
+                "Confirm that the repeated material amount represents genuine recurring transactions and is not caused by duplicate, template-based, or incorrectly posted entries.",
+                0.72,
+                group.slice(0, 8)
             ));
         }
     }
@@ -276,14 +288,24 @@ class BalanceAuditor {
 
         if (tiny.length < 10 || tiny.length / transactions.length < 0.5) return;
 
+        const totalValue = amounts.reduce((sum, value) => sum + value, 0);
+        const tinyValue = tiny.reduce((sum, t) => sum + this.amount(t), 0);
+        const tinyValueRatio = totalValue > 0 ? tinyValue / totalValue : 0;
+
+        // Only flag the pattern when the many small entries also represent a
+        // very small share of the account's total transaction value. This
+        // avoids calling a normal population of smaller transactions
+        // suspicious merely because one unusually large entry exists.
+        if (tinyValueRatio > 0.02) return;
+
         findings.push(this.finding(
             "low",
             "LARGE_NUMBER_OF_TINY_TRANSACTIONS",
-            "Large number of relatively small transactions",
-            `${tiny.length} of ${transactions.length} transactions are at or below 1% of the largest transaction amount in this account.`,
-            "Review whether these entries are expected operational activity or whether they indicate excessive fragmentation or posting noise.",
-            0.66,
-            tiny.slice(0, 5)
+            "Large number of low-value transactions",
+            `${tiny.length} of ${transactions.length} transactions are at or below 1% of the largest transaction amount, while together representing only ${(tinyValueRatio * 100).toFixed(2)}% of total transaction value.`,
+            "Review whether these low-value entries are expected operational activity or whether they indicate excessive fragmentation, posting noise, or inappropriate use of the account.",
+            0.71,
+            tiny.slice(0, 8)
         ));
     }
 
