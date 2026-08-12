@@ -1,0 +1,28 @@
+MANAGER-AI — FREE ONLINE AI AUDIT
+
+This package keeps AI Audit separate from ManagerServer.exe.
+
+Architecture:
+Manager.io -> Manager-AI -> /api/ai-audit -> Vercel -> OpenRouter -> DeepSeek free model
+
+Deploy:
+1. Import this project into Vercel.
+2. Add Environment Variable:
+   OPENROUTER_API_KEY = your OpenRouter API key
+3. Redeploy.
+4. Do NOT put the API key in HTML/JS or ManagerServer/NSSM.
+
+Optional environment variables:
+OPENROUTER_MODEL=deepseek/deepseek-v4-flash:free
+OPENROUTER_SITE_URL=https://your-vercel-domain
+OPENROUTER_APP_NAME=Manager AI Accounting Auditor
+
+After deployment, the Manager-AI frontend should call:
+https://YOUR-VERCEL-DOMAIN/api/ai-audit
+
+Important:
+- The endpoint accepts POST only.
+- A direct browser GET to /api/ai-audit returning 405 is normal.
+- The AI receives structured accounting/audit JSON, not raw HTML or the whole database.
+- No DeepSeek model is downloaded to the Windows Server or user computer.
+- The free model/provider has usage limits; no paid credits are required for the free model.
