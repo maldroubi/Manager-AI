@@ -2,7 +2,7 @@
 // Uses OpenRouter free-model inference. Keep OPENROUTER_API_KEY server-side.
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "deepseek/deepseek-v4-flash:free";
+const DEFAULT_MODEL = "openrouter/free";
 
 const SYSTEM_PROMPT = `You are the final accounting audit layer for Manager AI.
 
@@ -105,6 +105,9 @@ export default async function handler(req, res) {
 
         const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 50000);
+
         const response = await fetch(OPENROUTER_URL, {
             method: "POST",
             headers: {
@@ -116,7 +119,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 model,
                 temperature: 0.1,
-                reasoning: { effort: "high" },
+                reasoning: { effort: "medium" },
                 messages: [
                     { role: "system", content: SYSTEM_PROMPT },
                     {
@@ -132,8 +135,11 @@ export default async function handler(req, res) {
                         schema: SCHEMA
                     }
                 }
-            })
+            }),
+            signal: controller.signal
         });
+
+        clearTimeout(timeout);
 
         const data = await response.json();
 
@@ -162,7 +168,7 @@ export default async function handler(req, res) {
         console.error("[Manager AI] AI audit error", error);
         return res.status(500).json({
             error: error?.name === "AbortError"
-                ? "AI audit request timed out."
+                ? "AI audit request timed out after 50 seconds. The free model may be busy; retrying the audit is safe."
                 : (error?.message || "AI audit failed.")
         });
     }

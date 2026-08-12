@@ -354,9 +354,11 @@ class BalanceAuditor {
         // a receivable/payable account as a high-priority classification signal.
         const transferTypeOnly = [...typeCounts.keys()].length === 1 &&
             /^inter\s+account\s+transfer$/i.test([...typeCounts.keys()][0]);
-        const highPriority = transferTypeOnly &&
-            (category === "receivable" || category === "payable") &&
-            unexpected.length >= 2;
+        // Inter Account Transfer is a legitimate Manager document type.
+        // Its presence on a receivable/payable account is a review signal,
+        // not proof of a misclassification. Let the AI inspect the actual
+        // transaction context before escalating it.
+        const highPriority = false;
 
         // Detect overlap with the duplicate rule so the reviewer understands
         // when the same entries are triggering two independent audit signals.
@@ -402,8 +404,8 @@ class BalanceAuditor {
 
         let description = `${unexpected.length} of ${transactions.length} transactions use document types that are not normally expected for a ${category} account. Detected types: ${typeSummary}.`;
 
-        if (highPriority) {
-            description += ` All ${unexpected.length} unexpected entries are Inter Account Transfer postings on this ${category} account, which is a strong account-classification review signal.`;
+        if (transferTypeOnly && (category === "receivable" || category === "payable")) {
+            description += ` All ${unexpected.length} entries are Inter Account Transfer postings on this ${category} account. This is a classification review signal, not a confirmed error; the AI should inspect the underlying posting context before escalating it.`;
         }
 
         if (overlappingUnexpected > 0) {

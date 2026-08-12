@@ -124,38 +124,51 @@ class EntryExtractor {
             if (dateIndex < 0) return;
 
             const date = values[dateIndex];
-            const amountIndex = (() => {
-                for (let i = values.length - 1; i > dateIndex; i--) {
-                    if (/(?:AED|SAR|USD|\$|Dr\b|Cr\b)/i.test(values[i]) && /\d/.test(values[i])) {
-                        return i;
+            const isDetailed = td.length >= 12;
+
+            let typeText = "";
+            let description = "";
+            let amountText = "";
+            let balanceText = "";
+
+            if (isDetailed) {
+                // Established detailed Manager layout:
+                // Edit, View, Date, Document, Contact, ..., Description,
+                // ..., Amount, ..., Running Balance.
+                typeText = values[3] || "";
+                description = values[6] || "";
+                amountText = values[9] || "";
+                balanceText = values[11] || "";
+            } else {
+                // Current compact Manager layout:
+                // Edit | View | Date | Transaction | Account | Amount
+                typeText = values[dateIndex + 1] || "";
+                const amountIndex = (() => {
+                    for (let i = values.length - 1; i > dateIndex; i--) {
+                        if (/(?:AED|SAR|USD|EUR|GBP|\$|€|£|Dr\b|Cr\b)/i.test(values[i]) && /\d/.test(values[i])) {
+                            return i;
+                        }
                     }
-                }
-                return values.length - 1;
-            })();
-
-            const amountText = values[amountIndex] || "";
-
-            // In the current compact Manager ledger there is no separate
-            // running-balance column. Keep the amount as the transaction
-            // amount and leave balance unavailable rather than fabricating it.
-            const typeText = values[dateIndex + 1] || "";
-            const description = values.slice(dateIndex + 2, amountIndex).join(" ").trim();
+                    return values.length - 1;
+                })();
+                amountText = values[amountIndex] || "";
+                description = values.slice(dateIndex + 2, amountIndex).join(" ").trim();
+            }
 
             const document = this.parseDocument(typeText);
+            const parsedBalance = this.parseBalance(balanceText);
+            const balanceAvailable = isDetailed && /\d/.test(balanceText);
 
             transactions.push({
                 date,
                 documentType: document.type || typeText,
                 documentNumber: document.number,
                 description,
-                contact: "",
+                contact: isDetailed ? (values[4] || "") : (values[dateIndex + 2] || ""),
                 amount: this.parseAmount(amountText),
                 side: this.parseSide(amountText),
-                balance: {
-                    value: 0,
-                    side: ""
-                },
-                balanceAvailable: false
+                balance: balanceAvailable ? parsedBalance : null,
+                balanceAvailable
             });
         });
 
@@ -167,525 +180,42 @@ class EntryExtractor {
     // EXTRACT FINAL ACCOUNT BALANCE
     // ==================================================
 
-    extractFinalBalance(
-        doc,
-        transactionTable
-    ) {
+    extractFinalBalance(doc, transactionTable) {
 
-        /*
-         * ------------------------------------------------
-         * METHOD 1
-         *
-         * Check <tfoot> first.
-         * ------------------------------------------------
-         */
+        // The compact Manager Trial Balance Transactions page shows a blue
+        // amount bar at the bottom, but that value is a transaction total,
+        // not necessarily the account's ending/running balance. Never use a
+        // generic money-looking element as the account balance.
+        //
+        // A trustworthy transaction balance is available only when the
+        // detailed ledger contains an explicit running-balance column.
+        const rows = [...transactionTable.querySelectorAll("tbody tr")];
+        const candidates = [];
 
-        const footerRows =
-            [
-                ...transactionTable.querySelectorAll(
-                    "tfoot tr"
-                )
-            ];
+        for (const tr of rows) {
+            const td = [...tr.querySelectorAll("td")];
+            if (td.length < 12) continue;
 
+            const values = td.map(cell => this.clean(cell));
+            const date = values[2] || "";
+            const balanceText = values[11] || "";
+            const balance = this.parseBalance(balanceText);
 
-        for (
-            const tr
-            of footerRows
-        ) {
-
-            const text =
-                this.clean(
-                    tr
-                );
-
-
-            const result =
-                this.parseBalanceAmount(
-                    text
-                );
-
-
-            if (
-                result !== null
-            ) {
-
-                return result;
-
-            }
-
+            if (!date || !/\d/.test(balanceText)) continue;
+            candidates.push({ date, balance });
         }
 
+        if (!candidates.length) return null;
 
-        /*
-         * ------------------------------------------------
-         * METHOD 2
-         *
-         * Search elements immediately after the
-         * transaction table.
-         *
-         * Manager may render the blue total bar
-         * outside the actual table.
-         * ------------------------------------------------
-         */
-
-        let current =
-            transactionTable;
-
-
-        for (
-            let i = 0;
-            i < 10;
-            i++
-        ) {
-
-            current =
-                current.nextElementSibling;
-
-
-            if (!current)
-                break;
-
-
-            const result =
-                this.findBalanceInElement(
-                    current
-                );
-
-
-            if (
-                result !== null
-            ) {
-
-                return result;
-
-            }
-
-        }
-
-
-        /*
-         * ------------------------------------------------
-         * METHOD 3
-         *
-         * Search the parent container.
-         *
-         * This handles structures where the table
-         * and blue total bar are siblings inside
-         * the same Manager container.
-         * ------------------------------------------------
-         */
-
-        let parent =
-            transactionTable.parentElement;
-
-
-        for (
-            let level = 0;
-            level < 5 && parent;
-            level++
-        ) {
-
-            const result =
-                this.findBalanceInElement(
-                    parent,
-                    transactionTable
-                );
-
-
-            if (
-                result !== null
-            ) {
-
-                return result;
-
-            }
-
-
-            parent =
-                parent.parentElement;
-
-        }
-
-
-        /*
-         * ------------------------------------------------
-         * METHOD 4
-         *
-         * Search the entire document for an element
-         * whose visible text is ONLY a currency amount.
-         *
-         * Example:
-         *
-         * AED 25,000.00
-         *
-         * This is the important fallback for the
-         * blue Manager total bar.
-         * ------------------------------------------------
-         */
-
-        const allElements =
-            [
-                ...doc.querySelectorAll(
-                    "*"
-                )
-            ];
-
-
-        for (
-            const element
-            of allElements
-        ) {
-
-            /*
-             * Ignore elements inside transaction rows.
-             */
-
-            if (
-                element.closest(
-                    "tbody tr"
-                )
-            ) {
-
-                continue;
-
-            }
-
-
-            const text =
-                this.clean(
-                    element
-                );
-
-
-            if (
-                !this.isPureMoneyText(
-                    text
-                )
-            ) {
-
-                continue;
-
-            }
-
-
-            /*
-             * We want the smallest element containing
-             * the exact money text.
-             */
-
-            const childMoney =
-                [
-                    ...element.children
-                ]
-                .some(
-                    child => {
-
-                        return this.isPureMoneyText(
-                            this.clean(
-                                child
-                            )
-                        );
-
-                    }
-                );
-
-
-            if (
-                childMoney
-            ) {
-
-                continue;
-
-            }
-
-
-            const result =
-                this.parseBalanceAmount(
-                    text
-                );
-
-
-            if (
-                result !== null
-            ) {
-
-                return result;
-
-            }
-
-        }
-
-
-        /*
-         * Nothing found.
-         */
-
-        return {
-
-            value: 0,
-
-            side: ""
-
-        };
+        candidates.sort((a, b) => this.dateValue(a.date) - this.dateValue(b.date));
+        return candidates[candidates.length - 1].balance;
     }
 
-
-    // ==================================================
-    // FIND BALANCE INSIDE ELEMENT
-    // ==================================================
-
-    findBalanceInElement(
-        element,
-        transactionTable = null
-    ) {
-
-        if (!element)
-            return null;
-
-
-        /*
-         * Search descendants for exact currency text.
-         */
-
-        const elements =
-            [
-                element,
-                ...element.querySelectorAll(
-                    "*"
-                )
-            ];
-
-
-        for (
-            const child
-            of elements
-        ) {
-
-            /*
-             * Never use the transaction table itself.
-             */
-
-            if (
-                transactionTable &&
-                (
-                    child === transactionTable ||
-                    transactionTable.contains(
-                        child
-                    )
-                )
-            ) {
-
-                continue;
-
-            }
-
-
-            /*
-             * Never use transaction rows.
-             */
-
-            if (
-                child.closest(
-                    "tbody tr"
-                )
-            ) {
-
-                continue;
-
-            }
-
-
-            const text =
-                this.clean(
-                    child
-                );
-
-
-            if (
-                !this.isPureMoneyText(
-                    text
-                )
-            ) {
-
-                continue;
-
-            }
-
-
-            /*
-             * Prefer the smallest element
-             * containing the exact amount.
-             */
-
-            const hasExactChild =
-                [
-                    ...child.children
-                ]
-                .some(
-                    nested => {
-
-                        return this.isPureMoneyText(
-                            this.clean(
-                                nested
-                            )
-                        );
-
-                    }
-                );
-
-
-            if (
-                hasExactChild
-            ) {
-
-                continue;
-
-            }
-
-
-            const result =
-                this.parseBalanceAmount(
-                    text
-                );
-
-
-            if (
-                result !== null
-            ) {
-
-                return result;
-
-            }
-
-        }
-
-
-        return null;
+    dateValue(value) {
+        const match = String(value || "").trim().match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        if (!match) return 0;
+        return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])).getTime();
     }
-
-
-    // ==================================================
-    // CHECK IF TEXT IS ONLY A MONEY VALUE
-    // ==================================================
-
-    isPureMoneyText(
-        text
-    ) {
-
-        if (!text)
-            return false;
-
-
-        /*
-         * Examples accepted:
-         *
-         * AED 25,000.00
-         * SAR 25,000.00
-         * USD 25,000.00
-         * $25,000.00
-         * 25,000.00
-         * AED 25,000.00 Dr
-         */
-
-        const pattern =
-            /^(?:AED|SAR|USD|EUR|GBP|\$|€|£)?\s*-?\d[\d,]*(?:\.\d+)?\s*(?:Dr|Cr)?$/i;
-
-
-        return pattern.test(
-            text.trim()
-        );
-    }
-
-
-    // ==================================================
-    // PARSE BALANCE AMOUNT
-    // ==================================================
-
-    parseBalanceAmount(
-        text
-    ) {
-
-        if (!text)
-            return null;
-
-
-        const cleanText =
-            String(text)
-                .replace(
-                    /\s+/g,
-                    " "
-                )
-                .trim();
-
-
-        /*
-         * Only accept an element that represents
-         * a money value, rather than arbitrary text.
-         */
-
-        if (
-            !this.isPureMoneyText(
-                cleanText
-            )
-        ) {
-
-            return null;
-
-        }
-
-
-        const amount =
-            this.parseAmount(
-                cleanText
-            );
-
-
-        if (
-            !Number.isFinite(
-                amount
-            )
-        ) {
-
-            return null;
-
-        }
-
-
-        let side = "";
-
-
-        if (
-            /\bDr\b/i.test(
-                cleanText
-            )
-        ) {
-
-            side =
-                "debit";
-
-        }
-        else if (
-            /\bCr\b/i.test(
-                cleanText
-            )
-        ) {
-
-            side =
-                "credit";
-
-        }
-
-
-        return {
-
-            value:
-                amount,
-
-            side
-
-        };
-    }
-
 
     // ==================================================
     // PARSE DOCUMENT

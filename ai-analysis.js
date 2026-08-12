@@ -5,7 +5,7 @@
 class AIAuditAnalyzer {
     constructor(options = {}) {
         this.endpoint = options.endpoint || "/api/ai-audit";
-        this.timeoutMs = options.timeoutMs || 60000;
+        this.timeoutMs = options.timeoutMs || 55000;
     }
 
     async analyze(account, ruleFindings = [], balanceCheck = null) {

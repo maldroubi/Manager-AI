@@ -76,31 +76,32 @@ function checkBalance(account) {
     const balanceSheetBalance = getBalanceSheetBalance(account);
     const latestTransaction = getLatestTransaction(account.transactions);
 
-    if (!latestTransaction) {
+    // Prefer an explicitly extracted ending balance. This is only populated
+    // when Manager exposes a real running-balance value, never from the
+    // compact page's blue transaction-total bar.
+    const explicitBalance = account.finalBalance;
+    if (explicitBalance && Number.isFinite(Number(explicitBalance.value))) {
+        const transactionBalance = parseSignedBalance(explicitBalance);
+        const difference = balanceSheetBalance - transactionBalance;
         return {
-            available: false,
+            available: true,
             balanceSheetBalance,
-            transactionBalance: null,
-            difference: null,
-            matches: null,
-            transaction: null
+            transactionBalance,
+            difference,
+            matches: Math.abs(difference) < 0.01,
+            transaction: latestTransaction
         };
     }
 
-    // Some Manager transaction pages expose transaction amounts but do NOT
-    // expose a running-balance column. The extractor marks those rows with
-    // balanceAvailable:false and a placeholder balance of 0. Never compare
-    // that placeholder with the Balance Sheet balance.
-    if (latestTransaction.balanceAvailable === false ||
-        latestTransaction.balance === null ||
-        latestTransaction.balance === undefined) {
+    if (!latestTransaction || latestTransaction.balanceAvailable === false ||
+        latestTransaction.balance === null || latestTransaction.balance === undefined) {
         return {
             available: false,
             balanceSheetBalance,
             transactionBalance: null,
             difference: null,
             matches: null,
-            transaction: latestTransaction
+            transaction: latestTransaction || null
         };
     }
 
@@ -515,6 +516,10 @@ async function start() {
                         account.transactions =
                             extracted.transactions || [];
 
+                        account.finalBalance = extracted.finalBalance || null;
+                        account.transactionLedgerAvailable = extracted.hasTransactionLedger === true;
+                        account.transactionMeta = extracted.diagnostics || null;
+
                         console.groupCollapsed("[Manager AI] Transaction extraction");
                         console.log("hasTransactionLedger:", extracted.hasTransactionLedger);
                         console.log("transactionCount:", account.transactions.length);
@@ -544,6 +549,9 @@ async function start() {
 
                                     transactionCount:
                                         account.transactions.length,
+
+                                    extractedFinalBalance:
+                                        account.finalBalance,
 
                                     balanceSheetBalance:
                                         balanceCheck.balanceSheetBalance,
