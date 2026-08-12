@@ -1,14 +1,14 @@
 // Vercel/serverless endpoint for the Manager AI final audit layer.
-// Keep CEREBRAS_API_KEY server-side. Never put the key in the browser bundle.
+// Uses OpenRouter free-model inference. Keep OPENROUTER_API_KEY server-side.
 
-const CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_MODEL = "deepseek/deepseek-v4-flash:free";
 
 const SYSTEM_PROMPT = `You are the final accounting audit layer for Manager AI.
 
 Act like a senior external auditor reviewing a Balance Sheet account.
 The deterministic rule engine produces SIGNALS, not facts. You must independently
-validate every signal against the transaction ledger supplied in the payload. If the payload
-marks the ledger as sampled, do not claim that unseen transactions were reviewed.
+validate every signal against the FULL underlying transaction ledger.
 
 PROJECT SCOPE:
 - Detect possible accounting mistakes, misclassification, suspicious balances,
@@ -91,9 +91,9 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: "Method not allowed" });
     }
 
-    if (!process.env.CEREBRAS_API_KEY) {
+    if (!process.env.OPENROUTER_API_KEY) {
         return res.status(503).json({
-            error: "CEREBRAS_API_KEY is not configured on the AI audit server."
+            error: "OPENROUTER_API_KEY is not configured on the AI audit server."
         });
     }
 
@@ -103,18 +103,20 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: "Invalid audit payload." });
         }
 
-        const model = process.env.CEREBRAS_MODEL || "gpt-oss-120b";
-        const ledgerMode = payload.ledgerMode || "full";
+        const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
-        const response = await fetch(CEREBRAS_URL, {
+        const response = await fetch(OPENROUTER_URL, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${process.env.CEREBRAS_API_KEY}`,
-                "Content-Type": "application/json"
+                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://manager-ai.local",
+                "X-Title": process.env.OPENROUTER_APP_NAME || "Manager AI Accounting Auditor"
             },
             body: JSON.stringify({
                 model,
-                reasoning_effort: process.env.CEREBRAS_REASONING_EFFORT || "medium",
+                temperature: 0.1,
+                reasoning: { effort: "high" },
                 messages: [
                     { role: "system", content: SYSTEM_PROMPT },
                     {
@@ -122,8 +124,6 @@ export default async function handler(req, res) {
                         content: JSON.stringify(payload)
                     }
                 ],
-                max_completion_tokens: Number(process.env.CEREBRAS_MAX_COMPLETION_TOKENS || 2500),
-                temperature: 0.2,
                 response_format: {
                     type: "json_schema",
                     json_schema: {
@@ -138,7 +138,7 @@ export default async function handler(req, res) {
         const data = await response.json();
 
         if (!response.ok) {
-            const message = data?.error?.message || `Cerebras request failed with HTTP ${response.status}.`;
+            const message = data?.error?.message || `OpenRouter request failed with HTTP ${response.status}.`;
             return res.status(502).json({ error: message });
         }
 
@@ -156,8 +156,7 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
             result,
-            model,
-            ledgerMode
+            model
         });
     } catch (error) {
         console.error("[Manager AI] AI audit error", error);

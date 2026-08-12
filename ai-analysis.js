@@ -11,42 +11,24 @@ class AIAuditAnalyzer {
     async analyze(account, ruleFindings = [], balanceCheck = null) {
         if (!account) throw new Error("No account supplied to AI audit.");
 
-        const normalizedTransactions = Array.isArray(account.transactions)
-            ? account.transactions.filter(Boolean).map((t, index) => ({
-                index: index + 1,
-                date: t.date || "",
-                documentType: t.documentType || "",
-                documentNumber: t.documentNumber || "",
-                description: t.description || "",
-                contact: t.contact || "",
-                amount: t.amount?.value ?? t.amount ?? 0,
-                side: t.side || "",
-                balance: t.balance?.value ?? t.balance ?? null,
-                balanceSide: t.balance?.side || "",
-                balanceAvailable: t.balanceAvailable !== false
-            }))
-            : [];
-
-        // Cerebras' free tier has a smaller effective context limit. Keep normal
-        // accounts fully represented, but avoid sending an oversized ledger that
-        // would make the free online audit fail. For large ledgers we preserve the
-        // beginning and end, while the deterministic engine still sees every row.
-        const MAX_AI_ROWS = 120;
-        const ledgerMode = normalizedTransactions.length > MAX_AI_ROWS ? "sampled" : "full";
-        const transactions = ledgerMode === "full"
-            ? normalizedTransactions
-            : [
-                ...normalizedTransactions.slice(0, Math.ceil(MAX_AI_ROWS / 2)),
-                ...normalizedTransactions.slice(-Math.floor(MAX_AI_ROWS / 2))
-            ];
-
         const payload = {
             account: this.sanitizeAccount(account),
             balanceCheck: balanceCheck || null,
             ruleFindings: Array.isArray(ruleFindings) ? ruleFindings : [],
-            ledgerMode,
-            totalTransactionCount: normalizedTransactions.length,
-            transactions
+            transactions: Array.isArray(account.transactions)
+                ? account.transactions.filter(Boolean).map((t, index) => ({
+                    index: index + 1,
+                    date: t.date || "",
+                    documentType: t.documentType || "",
+                    documentNumber: t.documentNumber || "",
+                    description: t.description || "",
+                    amount: t.amount?.value ?? t.amount ?? 0,
+                    side: t.side || "",
+                    balance: t.balance?.value ?? t.balance ?? null,
+                    balanceSide: t.balance?.side || "",
+                    balanceAvailable: t.balanceAvailable !== false
+                }))
+                : []
         };
 
         const controller = new AbortController();
@@ -101,8 +83,7 @@ class AIAuditAnalyzer {
                 ? result.dismissedFindings
                 : [],
             followUp: Array.isArray(result.followUp) ? result.followUp : [],
-            model: data?.model || result.model || "",
-            ledgerMode: data?.ledgerMode || "full"
+            model: data?.model || result.model || ""
         };
     }
 
@@ -156,7 +137,6 @@ class AIAuditAnalyzer {
             <div style="margin-bottom:16px;padding:16px;border:2px solid ${border};border-radius:8px;">
                 <h3 style="margin-top:0;">${title}</h3>
                 <p style="margin:0 0 12px;">${this.escape(result.summary)}</p>
-                ${result.ledgerMode === "sampled" ? `<p style="margin:0 0 12px;font-size:12px;color:#8a5a00;"><strong>Note:</strong> The account has a large ledger; the AI reviewed a representative first/last transaction sample. Technical rules still ran against the complete extracted ledger.</p>` : ""}
                 ${findings || `<p style="margin:0;"><strong>No confirmed accounting anomaly was identified by the AI.</strong></p>`}
                 ${dismissed ? `
                     <details style="margin-top:12px;">

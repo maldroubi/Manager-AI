@@ -1,34 +1,39 @@
-Manager AI — Online Free AI Audit Layer
+Manager AI — Free Online AI Audit Layer
 
 This build keeps the existing Manager transaction extraction and deterministic
-accounting rules, but adds a final online AI review layer.
+rules, then adds a final AI review layer using an online free OpenRouter model.
 
 Flow:
-Manager.io -> transaction extraction -> deterministic audit signals -> online AI -> final findings
+Manager.io -> transaction extraction -> technical audit signals -> ledger + signals -> AI -> final findings
+
+AI scope:
+- Accounting entries and journal/ledger transactions only.
+- Possible misclassification, unusual postings, duplicate-looking entries,
+  suspicious balances and other accounting anomalies.
+- The AI does NOT analyse sales, profitability, customers, KPIs or business performance.
 
 Important:
-- The AI is an audit assistant, not the accounting authority.
-- The deterministic rules still run against the complete extracted ledger.
-- The AI receives the complete ledger for normal-sized accounts.
-- If an account has more than 120 transactions, the AI receives a representative first/last sample so the free online context limit is not exceeded; the technical audit still checks every extracted transaction.
-- Debit/credit side is explicitly extracted.
-- Matching debit/credit entries are not automatically treated as duplicates.
+- Deterministic rules are signals, not facts.
+- Normal double-entry debit/credit pairs are not automatically duplicates.
+- The AI must validate signals against the supplied ledger before confirming an error.
 - If AI is unavailable, technical audit signals remain visible.
+- Customer/contact fields are not sent to the AI layer.
 
-Current free online provider:
-Cerebras Inference -> OpenAI GPT OSS 120B (open-weight reasoning model).
+AI endpoint:
+POST /api/ai-audit
+
+Free online AI provider:
+OpenRouter free-model access. Default model:
+deepseek/deepseek-v4-flash:free
 
 Required server environment variable:
-CEREBRAS_API_KEY
+OPENROUTER_API_KEY
 
 Optional:
-CEREBRAS_MODEL=gpt-oss-120b
-CEREBRAS_REASONING_EFFORT=medium
-CEREBRAS_MAX_COMPLETION_TOKENS=2500
+OPENROUTER_MODEL=deepseek/deepseek-v4-flash:free
+OPENROUTER_SITE_URL=https://your-domain.example
+OPENROUTER_APP_NAME=Manager AI Accounting Auditor
 
-The provider is isolated in /api/ai-audit.js so it can be replaced later
-without changing the browser audit layer.
-
-Deployment:
-Deploy the project to a platform supporting the /api directory (for example Vercel).
-Set CEREBRAS_API_KEY only in the server environment. Never put the API key in browser-side files.
+No model is downloaded to the user's computer. The API key must remain server-side.
+The free model has provider/platform rate limits; no paid credits are required for
+the free model, but AI requests can stop when the free quota is exhausted.
