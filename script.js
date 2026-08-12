@@ -595,7 +595,21 @@ async function start() {
                                 <div style="margin-top:10px;">${audit.render(findings)}</div>
                             </details>`;
 
+                        /*
+                         * Render the transaction ledger immediately.
+                         * The ledger has already been fetched and extracted;
+                         * do not make the user wait for the AI request.
+                         */
+                        const table = extractTransactions(response.body);
+
+                        if (!table) {
+                            box.innerHTML = "<p>No transaction table found.</p>";
+                        } else {
+                            box.innerHTML = table;
+                        }
+
                         const aiBox = document.getElementById("ai-audit-result");
+
 
                         try {
                             const aiResult = await aiAudit.analyze(
@@ -620,27 +634,6 @@ async function start() {
                             `;
                         }
 
-
-                        /*
-                         * Display transactions
-                         */
-
-                        const table =
-                            extractTransactions(
-                                response.body
-                            );
-
-
-                        if (!table) {
-
-                            box.innerHTML =
-                                "<p>No transaction table found.</p>";
-
-                            return;
-                        }
-
-
-                        box.innerHTML = table;
 
                     }
 
