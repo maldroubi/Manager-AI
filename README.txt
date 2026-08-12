@@ -1,28 +1,34 @@
-Manager AI — V9 AI Audit Layer
+Manager AI — Online Free AI Audit Layer
 
 This build keeps the existing Manager transaction extraction and deterministic
-rules, but adds a final AI review layer.
+accounting rules, but adds a final online AI review layer.
 
 Flow:
-Manager.io -> transaction extraction -> technical audit signals -> FULL ledger + signals -> AI -> final findings
+Manager.io -> transaction extraction -> deterministic audit signals -> online AI -> final findings
 
 Important:
-- The AI receives the complete normalized transaction ledger.
-- Debit/credit side is now explicitly extracted from transaction amounts.
+- The AI is an audit assistant, not the accounting authority.
+- The deterministic rules still run against the complete extracted ledger.
+- The AI receives the complete ledger for normal-sized accounts.
+- If an account has more than 120 transactions, the AI receives a representative first/last sample so the free online context limit is not exceeded; the technical audit still checks every extracted transaction.
+- Debit/credit side is explicitly extracted.
 - Matching debit/credit entries are not automatically treated as duplicates.
-- The deterministic audit rules are signals only; the AI decides which findings
-  are confirmed and which are false positives.
-- If AI is unavailable, the technical signals remain visible.
+- If AI is unavailable, technical audit signals remain visible.
 
-AI endpoint:
-POST /api/ai-audit
+Current free online provider:
+Cerebras Inference -> OpenAI GPT OSS 120B (open-weight reasoning model).
 
 Required server environment variable:
-OPENAI_API_KEY
+CEREBRAS_API_KEY
 
 Optional:
-OPENAI_MODEL=gpt-5
+CEREBRAS_MODEL=gpt-oss-120b
+CEREBRAS_REASONING_EFFORT=medium
+CEREBRAS_MAX_COMPLETION_TOKENS=2500
 
-Deploy the project to a platform supporting the /api directory (for example
-Vercel), set OPENAI_API_KEY in the server environment, and keep the API key
-out of all browser-side files.
+The provider is isolated in /api/ai-audit.js so it can be replaced later
+without changing the browser audit layer.
+
+Deployment:
+Deploy the project to a platform supporting the /api directory (for example Vercel).
+Set CEREBRAS_API_KEY only in the server environment. Never put the API key in browser-side files.
